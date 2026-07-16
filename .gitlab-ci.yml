@@ -1,17 +1,13 @@
-image: rust:1.96.0
-
-default:
-  timeout: 10 hours
-
 stages:
+  - lint
+  - tests
   - build
-  - sonarqube
 
-variables:
-  NODE_VERSION: 24.15.0
-  DENO_VERSION: 2.8.3
-  DENO_DIR: "${CI_PROJECT_DIR}/.deno"
+eslint:
+  stage: lint
+  image: node:24.18.0-alpine3.24
+  before_script:
+   - npm install --save-dev eslint @eslint/js typescript typescript-eslint eslint-plugin-vue vue-eslint-parser
+  script:
+   - npx eslint .
 
-include:
-  - local: ".gitlab/ci/build.yml"
-  - local: ".gitlab/ci/sonarqube.yml"
