@@ -7,7 +7,7 @@ eslint:
   stage: lint
   image: node:24.18.0-alpine3.24
   before_script:
-   - npm install --save-dev eslint @eslint/js typescript typescript-eslint eslint-plugin-vue vue-eslint-parser
+   - npm install --save-dev eslint @eslint/js typescript typescript-eslint eslint-plugin-vue vue-eslint-parser globals
   script:
    - npx eslint .
 
