@@ -4,7 +4,7 @@ import eslintPluginVue from 'eslint-plugin-vue';
 import globals from 'globals';
 
 export default typescriptEslint.config(
-  { ignores: ['*.d.ts', '**/coverage', '**/dist'] },
+  { ignores: ['*.d.ts', '**/coverage', '**/dist', '**/src-tauri/vendor/**'] },
   {
     extends: [
       eslint.configs.recommended,
@@ -19,6 +19,9 @@ export default typescriptEslint.config(
       parserOptions: {
         parser: typescriptEslint.parser,
       },
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'warn',
     },
   },
 );

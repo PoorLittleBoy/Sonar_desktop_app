@@ -23,7 +23,7 @@
         <ConfigPanel v-if="showConfig" @update:ConfigPanel-visible="(val: any) => showConfig = val" />
         <ImportPanel v-if="showPcap" :mode="'pcap'" @update:visible="(val: any) => showPcap = val"/>
         <ImportPanel v-if="showCsv" :mode="'csv'" @update:visible="(val: any) => showCsv = val"/>
-        <Filter v-if="showFilter" @update:visible="(val: any) => showFilter = val"/>
+        <FilterPanel v-if="showFilter" @update:visible="(val: any) => showFilter = val"/>
         <LabelsPanel v-if="showLabels" @update:visible="(val: any) => showLabels = val"/>
       </div>
     </div>
@@ -49,7 +49,7 @@ import StatusBar from '../components/NavBar/status-bar/StatusBar.vue';
 import ConfigPanel from '../components/AnalyseView/panels/ConfigPanel.vue';
 import BottomLong from '../components/AnalyseView/BottomLong.vue';
 import ImportPanel from '../components/AnalyseView/panels/ImportPanel.vue';
-import Filter from '../components/AnalyseView/panels/Filter.vue';
+import Filter from '../components/AnalyseView/panels/FilterPanel.vue';
 import LabelsPanel from '../components/AnalyseView/panels/LabelsPanel.vue';
 
 export default defineComponent({

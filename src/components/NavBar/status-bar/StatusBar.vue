@@ -31,8 +31,8 @@
     </div>
 
     <div class="right-status-content">
-      <Timer />
-      <Cpu />
+      <StatusTimer />
+      <CpuStatus />
 
       <p title="Trames reçues 📥 par la carte réseau">
         <span class="counter">{{ stats.received }} :📥</span>
@@ -72,8 +72,8 @@
 import { defineComponent } from 'vue';
 import ChannelStatus from './ChannelStatus.vue';
 import InterfaceStatus from './InterfaceStatus.vue';
-import Timer from './Timer.vue';
-import Cpu from './Cpu.vue';
+import Timer from './StatusTimer.vue';
+import Cpu from './CpuStatus.vue';
 
 import { useCaptureStore } from '../../../store/capture';
 import { invoke } from '@tauri-apps/api/core';

@@ -4,7 +4,7 @@
 -->
 <script setup>
 import { ref } from 'vue';
-import Capture from '../components/homeVue/Capture.vue';
+import Capture from '../components/homeVue/CaptureView.vue';
 import FromPcap from '../components/homeVue/FromPcap.vue';
 
 const showCapture = ref(true); // état pour savoir quel composant est au-dessus
@@ -22,7 +22,7 @@ const toggleView = () => {
     </div>
 
     <transition name="fade">
-      <Capture v-if="showCapture" class="overlay" />
+      <CaptureView v-if="showCapture" class="overlay" />
       <FromPcap v-else class="overlay" />
     </transition>
 
