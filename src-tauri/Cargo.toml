@@ -1,6 +1,6 @@
 [package]
 name = "sonar"
-version = "4.5.0"
+version = "4.7.0"
 description = "A Tauri network analyzer App"
 authors = ["Cyprien Avico <akmot9@proton.me>"]
 edition = "2024"
@@ -45,7 +45,7 @@ packet_parser = "8.1.0"
 netdev = "0.42.0"
 # Cœur métier partagé (matrice, CSV, paquets/tunnels, graphe, import PCAP),
 # consommé aussi par sonar-cli : source unique du domaine, cf. VISION.md.
-sonar-flows-core = { path = "../sonar-rust/crates/sonar-flows-core", features = [
+sonar-flows-core = { version = "=0.3.0", features = [
   "pcap",
 ] }
 

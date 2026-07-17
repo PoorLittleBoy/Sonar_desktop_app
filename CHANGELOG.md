@@ -2,6 +2,44 @@
 
 ## Non publié
 
+## 🛠 Corrections
+
+- **Barre de statut** : suppression du compteur redondant des paquets intégrés
+  à la matrice ; les pertes et erreurs de parsing restent affichées pour
+  expliquer les écarts avec les trames reçues. Les compteurs restent lisibles
+  au-delà de 1 000 sans chevauchement.
+
+## **[4.7.0] - 2026-07-16**
+
+## 🛠 Corrections
+
+- **Gravité du graphe sous Windows** : ForceAtlas2 peut démarrer son Web
+  Worker dans WebView2 grâce à la CSP dédiée aux workers locaux `blob:`.
+- **Import des labels Forge** : les en-têtes `adresse_mac,adresse_ip,label`
+  sont reconnus sans relâcher la validation de la première ligne.
+
+## **[4.6.2] - 2026-07-16**
+
+## 🛠 Corrections
+
+- **Build de release Linux à nouveau reproductible entre clones isolés** :
+  `sonar-flows-core 0.3.0` est publié, référencé avec une version exacte puis
+  vendorisé dans l'application. Cargo utilise ainsi une identité de source
+  stable au lieu du chemin local du checkout, qui faisait diverger les
+  binaires et bloquait la publication après comparaison des SHA-256.
+- **Publication des SBOM restaurée** : le générateur du SBOM frontend est
+  désormais suivi comme exécutable. Le workflow peut générer, téléverser,
+  attester et signer les SBOM backend et frontend au lieu d'échouer avec le
+  code 126.
+
+## 🔧 Maintenance
+
+- Les crates `sonar-flows-core` et `sonar-flows-cli` passent en version
+  `0.3.0`. Le cœur partagé est inclus dans le vendor hors ligne de
+  l'application et son inventaire de licences est mis à jour.
+
+## **[4.6.1] - 2026-07-16**
+
 ## ✨ Améliorations
 
 - **Rapport qualité d'import visible** (#150) : l'événement `Finished` de

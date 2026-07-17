@@ -84,9 +84,6 @@ pub enum CaptureEvent<'a> {
         app_dropped: u64,
         /// Paquets acceptés par le pipeline mais illisibles par le parseur.
         parse_errors: u64,
-        /// Paquets parsés et intégrés à la matrice (niveaux de tunnel non
-        /// recomptés).
-        integrated: u64,
         processed: u32,
     },
     /// Occupation du canal capture→processing (indicateur de backpressure).
@@ -126,6 +123,16 @@ pub enum CaptureEvent<'a> {
         /// CSV : une ligne invalide est une erreur fatale, pas un skip).
         parse_error_count: usize,
         matrix_total_count: usize,
+    },
+    /// Progression d'un import multi-fichiers. `current` et `total` comptent
+    /// les paquets pour un PCAP et les lignes pour une matrice CSV ; les index
+    /// de fichier commencent à 1 pour être affichés directement dans l'UI.
+    ImportProgress {
+        file_name: &'a str,
+        file_index: usize,
+        files_total: usize,
+        current: usize,
+        total: usize,
     },
     /// Graphe complet, envoyé en fin d'import pour recharger la vue.
     GraphSnapshot { graph_data: &'a GraphData },

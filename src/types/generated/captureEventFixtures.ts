@@ -27,7 +27,6 @@ export const statsFixture = ({
     "ifDropped": 0,
     "appDropped": 0,
     "parseErrors": 1,
-    "integrated": 9,
     "processed": 3
   }
 }) satisfies CaptureEvent;
@@ -58,6 +57,17 @@ export const finishedFixture = ({
     "integratedCount": 95,
     "parseErrorCount": 5,
     "matrixTotalCount": 40
+  }
+}) satisfies CaptureEvent;
+
+export const importProgressFixture = ({
+  "event": "importProgress",
+  "data": {
+    "fileName": "capture.pcap",
+    "fileIndex": 2,
+    "filesTotal": 5,
+    "current": 1000,
+    "total": 48350
   }
 }) satisfies CaptureEvent;
 
