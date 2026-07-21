@@ -8,7 +8,7 @@ variables:
 
 eslint:
   stage: lint
-  image: denoland/deno:latest
+  image: denoland/deno:2.7.10
   cache:
     key:
       files:
