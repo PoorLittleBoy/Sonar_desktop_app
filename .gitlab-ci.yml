@@ -20,7 +20,7 @@ eslint:
 
 clippy:
   stage: lint
-  image: rust:1.97.1
+  image: rust:1.96.0
   cache:
     key:
       files:
@@ -30,4 +30,5 @@ clippy:
       - target/
   script:
       - rustup component add clippy
+      - cd ./src-tauri
       - cargo clippy --all-targets --all-features
