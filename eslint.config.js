@@ -27,7 +27,9 @@ export default tseslint.config(
       },
       parserOptions: {
         parser: tseslint.parser,
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ['security/repro-env.ts'],
+        },
         extraFileExtensions: ['.vue'],
       },
     },

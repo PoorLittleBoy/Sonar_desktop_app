@@ -12,7 +12,7 @@ jest.mock("@/components/CaptureVue/BottomLong.vue", () => ({
   name: "BottomLong",
   render: (h) => h("div"),
 }));
-jest.mock("@/components/CaptureVue/MatriceTable.vue", () => ({
+jest.mock("@/components/CaptureVue/Matrice.vue", () => ({
   name: "Matrice",
   render: (h) => h("div"),
 }));
