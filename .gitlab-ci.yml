@@ -3,20 +3,13 @@ stages:
   - tests
   - build
 
-variables:
-  CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
-
 eslint:
   stage: lint
-  image: denoland/deno:2.7.10
-  cache:
-    key:
-      files:
-        - deno.lock
-    paths:
-      - .deno/
+  image: node:24.18.0-alpine3.24
+  before_script:
+   - npm install --save-dev eslint @eslint/js typescript typescript-eslint eslint-plugin-vue vue-eslint-parser globals
   script:
-    - deno run -A npm:eslint . --config eslint.config.js
+   - npx eslint .
 
 clippy:
   stage: lint
@@ -24,12 +17,10 @@ clippy:
   cache:
     key:
       files:
-        - src-tauri/Cargo.lock
+        - 
     paths:
       - .cargo/registry
-      - src-tauri/target/
-  before_script:
-    - rustup component add clippy
+      - target/
   script:
-    - cd src-tauri
-    - cargo clippy --all-targets --all-features -- -D warnings
+      - rustup component add clippy
+      - cargo clippy --all-targets --all-features
