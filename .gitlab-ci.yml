@@ -16,7 +16,7 @@ eslint:
     paths:
       - .deno/
   script:
-    - deno lint
+    - deno run -A npm:eslint . --config eslint.config.js
 
 clippy:
   stage: lint
