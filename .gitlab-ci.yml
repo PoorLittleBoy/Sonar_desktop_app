@@ -20,7 +20,7 @@ eslint:
 
 clippy:
   stage: lint
-  image: rust:1.96.0
+  image: gitlab.erdtcyber.com:5050/erdt-cyber/sonar:rust-clippy
   cache:
     key:
       files:
@@ -28,10 +28,6 @@ clippy:
     paths:
       - .cargo/registry
       - target/
-  before_script:
-    - apt-get update
-    - apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev pkg-config
-    - rustup component add clippy
   script:
       - cd ./src-tauri
       - cargo clippy --all-targets --all-features
