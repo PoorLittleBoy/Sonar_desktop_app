@@ -2,12 +2,51 @@
 
 ## Non publié
 
+## **[4.8.3] - 2026-07-27**
+
+## ✨ Améliorations
+
+- **Import direct des matrices Excel** : le sélecteur et le glisser-déposer
+  acceptent désormais les fichiers `.xlsx`. La première feuille est lue avec
+  le même schéma et la même validation stricte que les matrices CSV ; les
+  colonnes supplémentaires, même insérées au milieu, sont ignorées tant que
+  les en-têtes Sonar sont conservés. Les dates Excel sont normalisées au
+  format SFMS et les imports mixtes CSV/XLSX conservent la provenance de
+  chaque fichier.
+
 ## 🛠 Corrections
 
+- **Arrêt fiable de la capture** (#166) : élimination d'un interblocage
+  possible entre le démarrage et l'arrêt de la capture ; l'arrêt du pipeline
+  est désormais fiable même en cas d'enchaînement rapide des deux actions.
+- **Sessions préservées lors des imports rejetés** (#167) : une opération
+  d'import refusée (fichier invalide, validation échouée) ne supprime plus
+  les sessions existantes ; l'état de travail est restauré à l'identique.
+- **PCAPNG multi-interfaces** : l'import d'un fichier PCAPNG mêlant plusieurs
+  types d'interfaces affiche désormais un message d'erreur actionnable au
+  lieu d'une erreur générique.
 - **Barre de statut** : suppression du compteur redondant des paquets intégrés
   à la matrice ; les pertes et erreurs de parsing restent affichées pour
   expliquer les écarts avec les trames reçues. Les compteurs restent lisibles
   au-delà de 1 000 sans chevauchement.
+
+## **[4.8.2] - 2026-07-22**
+
+## 🛠 Corrections
+
+- **CI de l'oracle PCAP restaurée** : le script ShellCheck utilise désormais
+  une affectation portable de `CDPATH`, la configuration Dependabot est valide
+  et le changelog expose la version attendue par les contrôles de publication.
+
+## **[4.8.1] - 2026-07-22**
+
+## ✅ Tests
+
+- **Exactitude des matrices PCAP contrôlée avec TShark** (#168) : les captures
+  Ethernet, Linux cooked SLL/SLL2 et CAPWAP de la crate `packet_parser` sont
+  comparées flux par flux à des oracles TShark versionnés. Les champs communs,
+  l'encapsulation, le refus des captures non prises en charge et la stabilité
+  octet pour octet des exports SFMS sont vérifiés automatiquement par la CI.
 
 ## **[4.7.0] - 2026-07-16**
 

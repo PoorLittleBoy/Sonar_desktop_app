@@ -34,15 +34,12 @@
         <div class="spinner"></div>
         <p class="overlay-text">Conversion en cours…</p>
         <div v-if="importProgress" class="progress-group">
-          <div
+          <progress
             class="progress-track"
-            role="progressbar"
-            :aria-valuenow="Math.round(progressPercent)"
-            aria-valuemin="0"
-            aria-valuemax="100"
-          >
-            <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
-          </div>
+            :value="progressPercent"
+            max="100"
+            aria-label="Progression de l'import"
+          ></progress>
           <p class="progress-label">
             Fichier {{ importProgress.fileIndex }}/{{ importProgress.filesTotal }} ·
             {{ progressFileName }} ·
@@ -105,7 +102,7 @@
         <div class="separator matrix-separator"></div>
         <div class="file-group">
           <button class="btn btn-add text" @click="addMatrixFiles" :disabled="isConverting">
-            Ajouter une ou plusieurs matrices (CSV)
+            Ajouter une ou plusieurs matrices (CSV ou XLSX)
           </button>
           <button v-if="matrixFiles.length > 0" class="btn btn-clear" @click="clearMatrixFiles" :disabled="isConverting">
             Effacer
@@ -137,6 +134,10 @@ import { classifyLabelImportError } from '../../../utils/labelImport';
 import { LabelConflictReport, LabelImportReport } from '../../../types/labels';
 import ConflictDialog from './ConflictDialog.vue'
 import ArbitrationDialog from './ArbitrationDialog.vue'
+import { appendUniquePaths, MATRIX_EXTENSIONS, PCAP_EXTENSIONS, routeDroppedPaths } from './import/fileTypes';
+import { progressFileNameOf, progressPercentOf } from './import/importProgress';
+import { filterLabelRows } from './import/labelSearch';
+import { finalizeImportState } from './import/importLifecycle';
 
 
 export default defineComponent({
@@ -187,22 +188,15 @@ export default defineComponent({
       return this.captureStore.importProgress;
     },
     progressPercent(): number {
-      const progress = this.importProgress;
-      if (!progress || progress.filesTotal <= 0) return 0;
-      const fileRatio = progress.total > 0
-        ? Math.min(1, Math.max(0, progress.current / progress.total))
-        : 1;
-      const globalRatio = (progress.fileIndex - 1 + fileRatio) / progress.filesTotal;
-      return Math.min(100, Math.max(0, globalRatio * 100));
+      return progressPercentOf(this.importProgress);
     },
     progressFileName(): string {
-      const progress = this.importProgress;
-      return progress ? (progress.fileName.split(/[\\/]/).pop() ?? progress.fileName) : '';
+      return progressFileNameOf(this.importProgress);
     },
     dropHint(): string {
       return this.mode === 'csv'
         ? 'Déposez un fichier de labels (.csv)'
-        : 'Déposez des captures (.pcap, .pcapng, .cap) ou des matrices (.csv)';
+        : 'Déposez des captures (.pcap, .pcapng, .cap) ou des matrices (.csv, .xlsx)';
     },
   },
 
@@ -213,40 +207,38 @@ export default defineComponent({
 
     // Route les fichiers déposés (drag & drop) selon le mode du panneau et
     // l'extension : labels en mode csv ; captures/matrices en mode pcap.
+    // Classification déléguée à ./import/fileTypes.ts.
     async handleDroppedPaths(paths: string[]) {
       if (this.isConverting) return;
-      const ext = (p: string) => (p.split('.').pop() ?? '').toLowerCase();
-      const pcapExts = ['pcap', 'pcapng', 'cap'];
+      const routing = routeDroppedPaths(paths, this.mode);
 
-      if (this.mode === 'csv') {
-        const csv = paths.find((p) => ext(p) === 'csv');
-        if (!csv) { info('drop ignoré : aucun fichier .csv'); return; }
+      if (routing.kind === 'ignored') {
+        info(this.mode === 'csv'
+          ? 'drop ignoré : aucun fichier .csv'
+          : 'drop ignoré : ni capture réseau ni matrice CSV/XLSX');
+        return;
+      }
+
+      if (routing.kind === 'csv') {
         useCaptureStore().isImporting = true;
         try {
-          await this.importLabelFile(csv);
+          await this.importLabelFile(routing.path);
         } finally {
           useCaptureStore().isImporting = false;
         }
         return;
       }
 
-      // Mode pcap : .pcap -> liste captures, .csv -> liste matrices.
-      const pcaps = paths.filter((p) => pcapExts.includes(ext(p)));
-      const matrices = paths.filter((p) => ext(p) === 'csv');
-      if (pcaps.length === 0 && matrices.length === 0) {
-        info('drop ignoré : ni .pcap ni .csv');
-        return;
+      if (routing.pcaps.length > 0) {
+        this.packetFiles = appendUniquePaths(this.packetFiles, routing.pcaps);
       }
-      if (pcaps.length > 0) {
-        this.packetFiles = Array.from(new Set([...this.packetFiles, ...pcaps]));
-      }
-      if (matrices.length > 0) {
-        this.matrixFiles = Array.from(new Set([...this.matrixFiles, ...matrices]));
+      if (routing.matrices.length > 0) {
+        this.matrixFiles = appendUniquePaths(this.matrixFiles, routing.matrices);
       }
     },
 
     addPcapFiles() {
-      return this.addFiles('pcap', ['pcap', 'pcapng', 'cap']);
+      return this.addFiles('pcap', PCAP_EXTENSIONS);
     },
 
     addCsvFiles() {
@@ -254,12 +246,12 @@ export default defineComponent({
     },
 
     addMatrixFiles() {
-      return this.addFiles('matrix', ['csv']);
+      return this.addFiles('matrix', MATRIX_EXTENSIONS);
     },
 
     async addFiles(type: 'pcap' | 'csv' | 'matrix', extensions: string[]) {
         const label = type === 'csv' ? 'Label File'
-          : type === 'matrix' ? 'Matrice CSV'
+          : type === 'matrix' ? 'Matrice CSV ou XLSX'
           : 'Capture File';
         useCaptureStore().isImporting = true;
 
@@ -276,11 +268,13 @@ export default defineComponent({
         if (type === 'csv') {
           await this.importLabelFile(files);
         } else {
+          // Même déduplication que le drag & drop : resélectionner un fichier
+          // déjà listé ne doit pas l'importer deux fois (#161).
           const list = Array.isArray(files) ? files : [files];
           if (type === 'matrix') {
-            this.matrixFiles.push(...list);
+            this.matrixFiles = appendUniquePaths(this.matrixFiles, list);
           } else {
-            this.packetFiles.push(...list);
+            this.packetFiles = appendUniquePaths(this.packetFiles, list);
           }
         }
       } finally {
@@ -314,12 +308,17 @@ export default defineComponent({
         info('réponse invoke');
         this.$emit('update:visible', false);
       } catch (err) {
-        displayCaptureError(err);
+        await displayCaptureError(err);
       } finally {
-        useCaptureStore().isImporting = false;
-        await useCaptureStore().refreshHasData();
-        this.isConverting = false;
-        this.captureStore.clearImportProgress();
+        await finalizeImportState(
+          () => {
+            this.captureStore.isImporting = false;
+            this.isConverting = false;
+            this.captureStore.clearImportProgress();
+          },
+          () => this.captureStore.refreshHasData(),
+          displayCaptureError,
+        );
       }
 
       this.packetFiles = [];
@@ -349,17 +348,22 @@ export default defineComponent({
         this.matrixFiles = [];
         this.$emit('update:visible', false);
       } catch (err) {
-        displayCaptureError(err);
+        await displayCaptureError(err);
       } finally {
-        useCaptureStore().isImporting = false;
-        await useCaptureStore().refreshHasData();
-        this.isConverting = false;
-        this.captureStore.clearImportProgress();
+        await finalizeImportState(
+          () => {
+            this.captureStore.isImporting = false;
+            this.isConverting = false;
+            this.captureStore.clearImportProgress();
+          },
+          () => this.captureStore.refreshHasData(),
+          displayCaptureError,
+        );
       }
     },
 
     listFilter() {
-      this.filteredlabelRows = this.labelRows.filter((row) => row.some((field) => field.toLowerCase().includes(this.searchInput.toLowerCase())))
+      this.filteredlabelRows = filterLabelRows(this.labelRows, this.searchInput);
     },
 
     async importLabelFile(path: string) {
@@ -399,9 +403,18 @@ export default defineComponent({
       } catch (err) {
         this.showLabelFileIssues(err);
       } finally {
-        this.labelRows = await invoke('get_label_rows');
-        this.filteredlabelRows =this.labelRows;
-        this.isConverting = false;    
+        // L'UI est libérée avant le refresh : un échec de get_label_rows ne
+        // peut ni bloquer le panneau ni masquer l'erreur d'import (#161).
+        await finalizeImportState(
+          () => {
+            this.isConverting = false;
+          },
+          async () => {
+            this.labelRows = await invoke('get_label_rows');
+            this.filteredlabelRows = this.labelRows;
+          },
+          displayCaptureError,
+        );
       }
     },
   
@@ -484,7 +497,7 @@ export default defineComponent({
       .catch((e) => { info(`onDragDropEvent indisponible: ${e}`); });
   },
 
-  async beforeUnmount() {
+  beforeUnmount() {
     for (const unsub of this.unsubs) unsub();
     this.unsubs = [];
 
@@ -492,10 +505,6 @@ export default defineComponent({
       this.unlistenDrop();
       this.unlistenDrop = null;
     }
-
-    this.labelRows = await invoke('get_label_rows');
-    this.filteredlabelRows = this.labelRows;
-
   },
 
 })
@@ -850,15 +859,28 @@ export default defineComponent({
 }
 
 .progress-track {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
   height: 8px;
+  border: 0;
   background-color: rgba(255, 255, 255, 0.15);
   border-radius: 4px;
   overflow: hidden;
 }
 
-.progress-fill {
-  height: 100%;
+.progress-track::-webkit-progress-bar {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.progress-track::-webkit-progress-value {
+  background-color: #4299e1;
+  border-radius: 4px;
+  transition: width 0.2s ease;
+}
+
+.progress-track::-moz-progress-bar {
   background-color: #4299e1;
   border-radius: 4px;
   transition: width 0.2s ease;

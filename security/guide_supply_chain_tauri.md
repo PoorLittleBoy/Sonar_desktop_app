@@ -98,9 +98,11 @@ ua-parser-js 2021) suivent le même schéma.
   crates.io par ce répertoire (`replace-with = "vendored-sources"`). Le build
   ne télécharge **rien** : une version piégée publiée sur crates.io ne peut
   pas entrer sans un commit relu qui modifie le vendor.
-- **Audit de chaque crate avec cargo-vet.** `src-tauri/supply-chain/`
-  (`audits.toml`, `config.toml`, `imports.lock`) trace le statut d'audit de
-  chaque dépendance ; l'ajout d'une crate non couverte est visible en revue.
+- **Statut cargo-vet bloquant.** `src-tauri/supply-chain/` (`audits.toml`,
+  `config.toml`, `imports.lock`) distingue les audits importés des exemptions
+  explicites. La CI contrôle les graphes `src-tauri` et `sonar-rust` avec un
+  store partagé : l'ajout d'une crate ou version non couverte échoue jusqu'à
+  audit ou exemption relue.
 - **cargo-deny et cargo-audit en CI** (`.github/workflows/rust-ci.yml`) :
   sources inconnues refusées, licences contrôlées (`src-tauri/deny.toml`),
   vulnérabilités connues (RUSTSEC) bloquantes — les exceptions sont
@@ -110,7 +112,7 @@ ua-parser-js 2021) suivent le même schéma.
 
 ```bash
 deno install --frozen
-cd src-tauri && cargo deny check && cargo audit
+cd src-tauri && cargo vet --locked --frozen && cargo deny check && cargo audit
 ```
 
 ---
@@ -324,15 +326,16 @@ d'invoquer des commandes Tauri sensibles.
 **Contre-mesures dans SONAR :**
 
 - **CSP stricte** (`src-tauri/tauri.conf.json`) :
-  `default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:`
-  — aucun script distant, aucune connexion réseau sortante depuis le webview.
-  Les seuls workers supplémentaires autorisés sont les workers locaux
-  `blob:` nécessaires au layout ForceAtlas2.
+  scripts, styles, images et polices limités à `'self'`; inline, `data:`,
+  objets, formulaires et frames interdits. Les connexions sont limitées à
+  l'IPC Tauri et `blob:` au worker local ForceAtlas2. Une politique distincte
+  n'autorise les WebSockets Vite qu'en développement.
   Une charge injectée ne peut ni charger de code externe ni téléphoner à la
   maison.
 - **Permissions Tauri déclaratives** (`src-tauri/capabilities/`) : le
-  frontend n'accède qu'aux commandes explicitement exposées ; l'ajout d'un
-  plugin passe par une revue de ses permissions.
+  frontend ne conserve que `core`, les dialogues, l'écriture du fichier choisi,
+  les logs et la fermeture de l'application ; aucun accès récursif aux dossiers
+  personnels.
 
 ---
 

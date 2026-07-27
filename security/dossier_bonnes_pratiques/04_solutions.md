@@ -25,16 +25,17 @@ composition logicielle.
   (`replace-with = "vendored-sources"`). **Le build ne télécharge aucune
   dépendance** : une version piégée publiée en amont ne peut pas entrer sans
   un commit explicite et relu modifiant le vendor.
-- **Audit par dépendance** avec cargo-vet (`src-tauri/supply-chain/` :
-  `audits.toml`, `config.toml`, `imports.lock`), qui trace le statut de
-  chaque crate.
+- **Statut par dépendance** avec cargo-vet (`src-tauri/supply-chain/` :
+  `audits.toml`, `config.toml`, `imports.lock`) : audits importés et exemptions
+  sont distingués, et la CI refuse toute nouvelle version non couverte dans
+  les graphes `src-tauri` et `sonar-rust`.
 - **Contrôles automatiques en intégration continue**
   (`.github/workflows/rust-ci.yml`) : `cargo deny check` (sources inconnues
   refusées, licences contrôlées via `src-tauri/deny.toml`) et `cargo audit`
   (vulnérabilités RUSTSEC).
 
 *Vérification :* `deno install --frozen` puis, dans `src-tauri/`,
-`cargo deny check && cargo audit`.
+`cargo vet --locked --frozen && cargo deny check && cargo audit`.
 
 ## 4.2 Contre le scénario B — traiter le lockfile comme du code
 
@@ -131,14 +132,15 @@ cosign verify-blob --bundle <artefact>.sigstore.json <artefact>
 
 - **Politique de sécurité de contenu (CSP) stricte**
   (`src-tauri/tauri.conf.json`) :
-  `default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:`.
-  Aucun script distant ni connexion réseau sortante depuis le webview : une
-  charge injectée ne peut ni charger de code externe ni exfiltrer vers un
-  serveur tiers. La source `blob:` est limitée aux workers locaux nécessaires
-  au layout ForceAtlas2.
+  scripts, styles, images et polices limités à `'self'`; styles/scripts inline,
+  attributs de style, `data:`, objets, formulaires et frames interdits. Les
+  connexions sont limitées à l'IPC Tauri. La source `blob:` n'est autorisée que
+  pour le worker local ForceAtlas2. Une `devCsp` séparée ouvre uniquement les
+  ports WebSocket Vite nécessaires au développement.
 - **Permissions Tauri déclaratives** (`src-tauri/capabilities/`) : le
-  frontend n'accède qu'aux commandes explicitement exposées ; l'ajout d'un
-  plugin impose la revue de ses permissions.
+  frontend ne conserve que `core`, les dialogues, l'écriture du fichier choisi,
+  les logs et la fermeture de l'application. Aucun accès récursif au dossier
+  personnel, au Bureau, aux Documents ou aux Téléchargements.
 
 ## 4.8 Le facteur humain (transverse aux scénarios D et E)
 

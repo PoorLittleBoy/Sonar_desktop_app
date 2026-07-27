@@ -114,6 +114,9 @@ impl Serialize for CaptureStateError {
             }
             Self::Import(e) => {
                 let kind = match e {
+                    PcapImportError::MissingInput(operation) => {
+                        PcapImportErrorKind::MissingInput(operation.clone())
+                    }
                     PcapImportError::OpenFileError(msg, msgg) => {
                         PcapImportErrorKind::OpenFileError(msg.clone(), msgg.clone())
                     }
@@ -178,6 +181,9 @@ impl From<sonar_flows_core::SonarCoreError> for CaptureStateError {
             SonarCoreError::UnsupportedLinkType { path, label } => CaptureStateError::Import(
                 PcapImportError::UnsupportedLinkType(path.display().to_string(), label),
             ),
+            SonarCoreError::MissingInput => {
+                CaptureStateError::Import(PcapImportError::MissingInput("cet import".to_string()))
+            }
             SonarCoreError::Io(e) => CaptureStateError::Io(e),
             other => CaptureStateError::Io(std::io::Error::other(other.to_string())),
         }
@@ -285,6 +291,14 @@ mod fidelity_tests {
     #[test]
     fn import_domain_nests_under_import_tag() {
         assert_json(
+            &CaptureStateError::Import(PcapImportError::MissingInput("l'import PCAP".to_string())),
+            json!({
+                "kind": "import",
+                "message": {"kind": "missingInput", "message": "l'import PCAP"},
+            }),
+            "import.missingInput",
+        );
+        assert_json(
             &CaptureStateError::Import(PcapImportError::OpenFileError(
                 "capture.pcap".to_string(),
                 "permission refusée".to_string(),
@@ -318,5 +332,85 @@ mod fidelity_tests {
             }),
             "label.invalidMacIpFormat",
         );
+    }
+}
+
+/// Conversion `sonar_flows_core::SonarCoreError -> CaptureStateError` : les
+/// trois variantes PCAP distinguées (ouverture/lecture/DLT non supporté)
+/// gardent leur identité côté front, le reste retombe sur `Io`.
+#[cfg(test)]
+mod sonar_core_error_conversion_tests {
+    use super::*;
+    use sonar_flows_core::SonarCoreError;
+    use std::path::PathBuf;
+
+    #[test]
+    fn pcap_open_becomes_import_open_file_error() {
+        let err: CaptureStateError = SonarCoreError::PcapOpen {
+            path: PathBuf::from("capture.pcap"),
+            message: "permission refusée".to_string(),
+        }
+        .into();
+        match err {
+            CaptureStateError::Import(PcapImportError::OpenFileError(path, message)) => {
+                assert_eq!(path, "capture.pcap");
+                assert_eq!(message, "permission refusée");
+            }
+            other => panic!("attendu Import(OpenFileError), reçu {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pcap_read_becomes_import_read_packet_error() {
+        let err: CaptureStateError = SonarCoreError::PcapRead {
+            path: PathBuf::from("capture.pcap"),
+            message: "paquet tronqué".to_string(),
+        }
+        .into();
+        match err {
+            CaptureStateError::Import(PcapImportError::ReadPacketError(path, message)) => {
+                assert_eq!(path, "capture.pcap");
+                assert_eq!(message, "paquet tronqué");
+            }
+            other => panic!("attendu Import(ReadPacketError), reçu {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unsupported_link_type_is_preserved() {
+        let err: CaptureStateError = SonarCoreError::UnsupportedLinkType {
+            path: PathBuf::from("capture.pcap"),
+            label: "DLT_RAW".to_string(),
+        }
+        .into();
+        match err {
+            CaptureStateError::Import(PcapImportError::UnsupportedLinkType(path, label)) => {
+                assert_eq!(path, "capture.pcap");
+                assert_eq!(label, "DLT_RAW");
+            }
+            other => panic!("attendu Import(UnsupportedLinkType), reçu {other:?}"),
+        }
+    }
+
+    #[test]
+    fn io_variant_passes_through() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "fichier introuvable");
+        let err: CaptureStateError = SonarCoreError::Io(io_err).into();
+        match err {
+            CaptureStateError::Io(e) => assert_eq!(e.kind(), std::io::ErrorKind::NotFound),
+            other => panic!("attendu Io, reçu {other:?}"),
+        }
+    }
+
+    /// L'absence d'entrée garde une identité typée jusqu'au frontend.
+    #[test]
+    fn missing_input_becomes_typed_import_error() {
+        let err: CaptureStateError = SonarCoreError::MissingInput.into();
+        match err {
+            CaptureStateError::Import(PcapImportError::MissingInput(operation)) => {
+                assert_eq!(operation, "cet import");
+            }
+            other => panic!("attendu Import(MissingInput), reçu {other:?}"),
+        }
     }
 }

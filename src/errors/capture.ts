@@ -26,7 +26,31 @@ export type InvalidLineValue = [number, string];
 export type InvalidFieldValue = [number, string, string];
 export type LabelConflictRow = [number, number, string, string, string, string, string];
 
+/** Rend lisible une valeur d'erreur hors contrat (chaîne, null, Error…)
+ *  sans jamais lever : c'est le dernier filet avant l'affichage (#161). */
+function stringifyUnknown(err: unknown): string {
+  if (typeof err === "string") return err;
+  if (err instanceof Error) return err.message;
+  try {
+    return JSON.stringify(err) ?? String(err);
+  } catch {
+    return String(err);
+  }
+}
+
 export async function displayCaptureError(err: unknown) {
+  // Garde objet/null : `"kind" in err` lève un TypeError sur une valeur non
+  // objet et masquerait l'erreur d'origine par une exception secondaire (#161).
+  if (typeof err !== "object" || err === null || !("kind" in err)) {
+    const userFriendlyMessage = `Erreur inattendue : ${stringifyUnknown(err)}`;
+    await message(userFriendlyMessage, {
+      title: "Erreur Capture (inattendue)",
+      kind: "error",
+    });
+    error(`Erreur Capture (inattendue) : ${userFriendlyMessage}`);
+    return;
+  }
+
   const captureError = err as CaptureStateErrorKind;
   let userFriendlyMessage = "Erreur inconnue";
 
@@ -113,7 +137,7 @@ export async function displayCaptureError(err: unknown) {
   );
 }
 
-function handleExportError(exportError: ExportErrorKind): string {
+export function handleExportError(exportError: ExportErrorKind): string {
   if (
     !exportError || typeof exportError !== "object" || !("kind" in exportError)
   ) {
@@ -136,7 +160,7 @@ function handleExportError(exportError: ExportErrorKind): string {
   }
 }
 
-function handleImportError(importError: ImportErrorKind): string {
+export function handleImportError(importError: ImportErrorKind): string {
   if (
     !importError || typeof importError !== "object" || !("kind" in importError)
   ) {
@@ -144,6 +168,8 @@ function handleImportError(importError: ImportErrorKind): string {
   }
 
   switch (importError.kind) {
+    case "missingInput":
+      return `Aucun fichier sélectionné pour ${importError.message}. Le relevé courant est inchangé.`;
     case "openFileError": {
       const [file, message] = importError.message;
       return `Impossible d'ouvrir le fichier ${file} : ${message}`;
@@ -163,13 +189,13 @@ function handleImportError(importError: ImportErrorKind): string {
 
 /// Formate une liste d'erreurs en la plafonnant : au-delà de `max` entrées
 /// (mauvais fichier, encodage…), le détail complet noie le diagnostic.
-function capList<T>(items: T[], format: (item: T) => string, max = 8): string {
+export function capList<T>(items: T[], format: (item: T) => string, max = 8): string {
   const shown = items.slice(0, max).map(format).join('\n');
   const rest = items.length - max;
   return rest > 0 ? `${shown}\n… et ${rest} autre${rest > 1 ? 's' : ''}` : shown;
 }
 
-function handleLabelerror(labelError: LabelErrorKind): string {
+export function handleLabelerror(labelError: LabelErrorKind): string {
   if (
     !labelError || typeof labelError !== "object" || !("kind" in labelError)
   ) {
