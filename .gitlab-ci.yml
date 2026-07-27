@@ -14,7 +14,7 @@ eslint:
       - node_modules/
       - .npm/
   before_script:
-    - npm install --save-dev eslint @eslint/js typescript typescript-eslint eslint-plugin-vue vue-eslint-parser globals
+    - npm ci --cache .npm --prefer-offline
   script:
     - npx eslint .
 
