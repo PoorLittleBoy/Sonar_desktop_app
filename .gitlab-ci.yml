@@ -1,7 +1,7 @@
 stages:
   - lint
-  - tests
   - build
+  - test
 
 eslint:
   stage: lint
