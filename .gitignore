@@ -79,3 +79,6 @@ cosign.pub
 .cargo-home/
 bundle-repro-*/
 src-tauri/vendor/**/target/
+.gitlab-ci-local/
+.gitlab-ci-local-variables.yml
+.gitlab-ci-local-env
