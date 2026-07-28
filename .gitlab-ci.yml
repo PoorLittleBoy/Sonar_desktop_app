@@ -5,8 +5,8 @@ stages:
 
 build-ci-image:
   stage: .pre
-  rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
+  #rules:
+  #  - if: $CI_COMMIT_REF_PROTECTED == "true"
   image: docker:27
   services:
     - docker:27-dind
