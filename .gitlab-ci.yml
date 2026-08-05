@@ -7,32 +7,35 @@ build-ci-image:
   stage: .pre
   #rules:
   #  - if: $CI_COMMIT_REF_PROTECTED == "true"
-  image: docker:27
-  services:
-    - docker:27-dind
-  variables:
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_TLS_VERIFY: 1
-    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  image: 
+    name: ghcr.io/osscontainertools/kaniko:v1.28.1-debug
+    entrypoint: [""]
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"${CI_REGISTRY}\":{\"auth\":\"$(printf "%s:%s" "${CI_REGISTRY_USER}" "${CI_REGISTRY_PASSWORD}" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
   script:
     - . ./config/build-versions.env
     - IMAGE_TAG=$(cat ./config/build-versions.env Dockerfile.ci | sha256sum | cut -c1-16)
     - IMAGE="${CI_REGISTRY_IMAGE}/ci-base:${IMAGE_TAG}"
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - |
-      if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+      if curl --fail \
+        -u "${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD}" \
+        "https://${CI_REGISTRY}/v2/${CI_PROJECT_PATH}/ci-base/manifests/${IMAGE_TAG}" \
+        > /dev/null 2>&1
+      then
         echo "Image déjà présente (${IMAGE_TAG}), pas de rebuild."
       else
-        docker build \
+        /kaniko/executor \
+          --context "${CI_PROJECT_DIR}" \
+          --dockerfile "${CI_PROJECT_DIR}/Dockerfile.ci" \
+          --destination "${IMAGE}" \
           --build-arg RUST_IMAGE_DIGEST="${RUST_IMAGE_DIGEST}" \
           --build-arg LINUX_APT_PACKAGES="${LINUX_APT_PACKAGES}" \
           --build-arg DEBIAN_SNAPSHOT_BASE_URL="${DEBIAN_SNAPSHOT_BASE_URL}" \
           --build-arg APT_SNAPSHOT_TIMESTAMP="${APT_SNAPSHOT_TIMESTAMP}" \
           --build-arg DENO_VERSION="${DENO_VERSION}" \
-          -f Dockerfile.ci \
-          -t "${IMAGE}" .
-        docker push "${IMAGE}"
+          --cache=true \
+          --cache-repo="${CI_REGISTRY_IMAGE}/cache"
       fi
     - echo "CI_BASE_IMAGE=${IMAGE}" > build.env
   artifacts:
