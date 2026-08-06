@@ -5,8 +5,14 @@
   Props : mode ('csv' | 'pcap'). Événement principal : update:visible.
 -->
 <template>
-  <div class="container">
-    <div class="center-container" :class="{ 'drag-over': isDragOver }">
+  <div
+    class="container"
+    role="dialog"
+    aria-modal="true"
+    :aria-label="mode === 'csv' ? 'Import de labels' : 'Import de captures ou de matrices'"
+    @keydown.esc="closeOnEscape"
+  >
+    <div class="center-container" :class="{ 'drag-over': isDragOver }" ref="panel" tabindex="-1">
       <!-- Retour visuel de drag & drop -->
       <div class="drop-hint" v-if="isDragOver">
         <div class="drop-hint-inner">
@@ -46,22 +52,30 @@
             {{ importProgress.current.toLocaleString() }}/{{ importProgress.total.toLocaleString() }}
           </p>
         </div>
+        <button type="button"
+          v-if="cancellableImport"
+          class="btn btn-cancel-import"
+          @click="cancelImport"
+          :disabled="cancelRequested"
+        >
+          {{ cancelRequested ? 'Annulation…' : "Annuler l'import" }}
+        </button>
       </div>
-      <button class="btn image-btn cross" @click.prevent="windowClosed" :disabled="isConverting">❌</button>
+      <button type="button" class="btn image-btn cross" @click.prevent="windowClosed" :disabled="isConverting">❌</button>
       
       <div v-if="mode === 'csv'" class="csv-group">
-          <button class="btn btn-add text" @click="addCsvFiles" :disabled="isConverting">
+          <button type="button" class="btn btn-add text" @click="addCsvFiles" :disabled="isConverting">
             Ajouter un fichier
           </button>
-          <button v-if="pendingConflicts > 0" class="btn btn-arbitrate" @click="openArbitration" :disabled="isConverting">
+          <button type="button" v-if="pendingConflicts > 0" class="btn btn-arbitrate" @click="openArbitration" :disabled="isConverting">
             ⚖️ Arbitrer les conflits ({{ pendingConflicts }})
           </button>
           <p v-show="labelRows.length == 0" class="text">Aucun label importé pour le moment</p>
           <div v-show="labelRows.length > 0" class="table-header-row">
             <h2 class="text table-title">Contenu importé</h2>
             <div class="search-group">
-              <input class="input-search" v-model="searchInput" @input="listFilter"/>
-              <button class="btn image-btn icon-lg" @click.prevent="clearLabelStore()" title="Réinitialiser le contenu">🔄</button>
+              <input class="input-search" v-model="searchInput" @input="listFilter" aria-label="Rechercher dans les labels importés"/>
+              <button type="button" class="btn image-btn icon-lg" @click.prevent="clearLabelStore()" title="Réinitialiser le contenu">🔄</button>
             </div>
           </div>
           <div v-show="labelRows.length > 0" class="data-table">
@@ -84,10 +98,10 @@
       
       <div v-else-if="mode === 'pcap'">
         <div class="file-group">
-          <button class="btn btn-add text" @click="addPcapFiles" :disabled="isConverting">
+          <button type="button" class="btn btn-add text" @click="addPcapFiles" :disabled="isConverting">
             Ajouter des fichiers .pcap
           </button>
-          <button v-if="packetFiles.length > 0" class="btn btn-clear" @click="clearFiles" :disabled="isConverting">
+          <button type="button" v-if="packetFiles.length > 0" class="btn btn-clear" @click="clearFiles" :disabled="isConverting">
             Effacer
           </button>
         </div>
@@ -96,15 +110,15 @@
             {{ file }}
           </li>
         </ul>
-        <button v-if="packetFiles.length > 0" @click="convertPcap" class="btn btn-open" :disabled="isConverting">
+        <button type="button" v-if="packetFiles.length > 0" @click="convertPcap" class="btn btn-open" :disabled="isConverting">
           Ouvrir
         </button>
         <div class="separator matrix-separator"></div>
         <div class="file-group">
-          <button class="btn btn-add text" @click="addMatrixFiles" :disabled="isConverting">
+          <button type="button" class="btn btn-add text" @click="addMatrixFiles" :disabled="isConverting">
             Ajouter une ou plusieurs matrices (CSV ou XLSX)
           </button>
-          <button v-if="matrixFiles.length > 0" class="btn btn-clear" @click="clearMatrixFiles" :disabled="isConverting">
+          <button type="button" v-if="matrixFiles.length > 0" class="btn btn-clear" @click="clearMatrixFiles" :disabled="isConverting">
             Effacer
           </button>
         </div>
@@ -113,7 +127,7 @@
             {{ file }}
           </li>
         </ul>
-        <button v-if="matrixFiles.length > 0" @click="importMatrixFiles" class="btn btn-open" :disabled="isConverting">
+        <button type="button" v-if="matrixFiles.length > 0" @click="importMatrixFiles" class="btn btn-open" :disabled="isConverting">
           Ouvrir
         </button>
       </div>
@@ -123,13 +137,13 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue';
-import { open } from '@tauri-apps/plugin-dialog';
+import { message, open } from '@tauri-apps/plugin-dialog';
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { info } from '@tauri-apps/plugin-log';
 import { useCaptureStore } from '../../../store/capture';
 import type { CaptureEvent, ImportProgress } from '../../../types/capture';
-import { displayCaptureError } from '../../../errors/capture';
+import { displayCaptureError, isImportCancellation } from '../../../errors/capture';
 import { classifyLabelImportError } from '../../../utils/labelImport';
 import { LabelConflictReport, LabelImportReport } from '../../../types/labels';
 import ConflictDialog from './ConflictDialog.vue'
@@ -138,6 +152,7 @@ import { appendUniquePaths, MATRIX_EXTENSIONS, PCAP_EXTENSIONS, routeDroppedPath
 import { progressFileNameOf, progressPercentOf } from './import/importProgress';
 import { filterLabelRows } from './import/labelSearch';
 import { finalizeImportState } from './import/importLifecycle';
+import { invokePcapImport } from '../../../utils/pcapImportContract';
 
 
 export default defineComponent({
@@ -161,7 +176,10 @@ export default defineComponent({
       filteredlabelRows: [] as [string, string, string][],
       searchInput: "",
       isConverting: false,
-      unsubs: [] as Array<() => void>,
+      // Annulation : seul l'import PCAP est annulable (les autres imports
+      // sont courts et ne consultent pas le jeton backend).
+      cancellableImport: false,
+      cancelRequested: false,
       showConflictDialog: false,
       conflictsResolved: false,
       showArbitration: false,
@@ -203,6 +221,13 @@ export default defineComponent({
   methods: {
     windowClosed() {
       this.$emit('update:visible', false);
+    },
+
+    // Échap ne ferme pas pendant une conversion en cours (même garde que le
+    // bouton ❌, désactivé via :disabled="isConverting").
+    closeOnEscape() {
+      if (this.isConverting) return;
+      this.windowClosed();
     },
 
     // Route les fichiers déposés (drag & drop) selon le mode du panneau et
@@ -250,9 +275,12 @@ export default defineComponent({
     },
 
     async addFiles(type: 'pcap' | 'csv' | 'matrix', extensions: string[]) {
-        const label = type === 'csv' ? 'Label File'
-          : type === 'matrix' ? 'Matrice CSV ou XLSX'
-          : 'Capture File';
+        const labels: Record<'pcap' | 'csv' | 'matrix', string> = {
+          csv: 'Label File',
+          matrix: 'Matrice CSV ou XLSX',
+          pcap: 'Capture File',
+        };
+        const label = labels[type];
         useCaptureStore().isImporting = true;
 
       try {
@@ -299,21 +327,37 @@ export default defineComponent({
       info('convert_from_pcap_list : ' + this.packetFiles);
 
       this.isConverting = true;
+      this.cancellableImport = true;
+      this.cancelRequested = false;
       this.captureStore.clearImportProgress();
       // Verrou global : bloque les entrées de l'app pendant la conversion.
       useCaptureStore().isImporting = true;
 
       try {
-        await invoke('convert_from_pcap_list', { pcapPaths: this.packetFiles, onEvent });
+        await invokePcapImport(invoke, this.packetFiles, onEvent);
         info('réponse invoke');
         this.$emit('update:visible', false);
       } catch (err) {
-        await displayCaptureError(err);
+        // L'annulation demandée par l'opérateur est une issue normale : elle
+        // est notifiée comme telle, pas affichée en dialogue d'erreur. Le
+        // backend garantit que le relevé courant est intact (import
+        // transactionnel).
+        if (isImportCancellation(err)) {
+          info('import PCAP annulé par l\'opérateur ; relevé courant inchangé');
+          await message('Import annulé. Le relevé courant est inchangé.', {
+            title: 'Import annulé',
+            kind: 'info',
+          });
+        } else {
+          await displayCaptureError(err);
+        }
       } finally {
         await finalizeImportState(
           () => {
             this.captureStore.isImporting = false;
             this.isConverting = false;
+            this.cancellableImport = false;
+            this.cancelRequested = false;
             this.captureStore.clearImportProgress();
           },
           () => this.captureStore.refreshHasData(),
@@ -322,6 +366,26 @@ export default defineComponent({
       }
 
       this.packetFiles = [];
+    },
+
+    /** Demande l'annulation coopérative de l'import PCAP en cours. Le
+     *  backend draine le fichier courant sans l'analyser et n'ouvre pas les
+     *  suivants ; `convert_from_pcap_list` échoue alors avec l'erreur typée
+     *  `import/cancelled`, traitée ci-dessus comme une issue normale. */
+    async cancelImport() {
+      this.cancelRequested = true;
+      try {
+        const active = await invoke<boolean>('cancel_import');
+        if (!active) {
+          // Course avec la fin d'import : rien à annuler, l'issue normale
+          // (succès ou erreur) de l'invoke en cours reprend la main.
+          info('cancel_import : aucun import actif, demande ignorée');
+          this.cancelRequested = false;
+        }
+      } catch (err) {
+        this.cancelRequested = false;
+        await displayCaptureError(err);
+      }
     },
 
     async importMatrixFiles() {
@@ -411,7 +475,7 @@ export default defineComponent({
           },
           async () => {
             this.labelRows = await invoke('get_label_rows');
-            this.filteredlabelRows = this.labelRows;
+            this.filteredlabelRows = filterLabelRows(this.labelRows, this.searchInput);
           },
           displayCaptureError,
         );
@@ -444,7 +508,7 @@ export default defineComponent({
           await invoke('clear_label_store');
           info('réponse invoke');
           this.labelRows = await invoke('get_label_rows');
-          this.filteredlabelRows = this.labelRows;
+          this.filteredlabelRows = filterLabelRows(this.labelRows, this.searchInput);
         } catch (err) {
           displayCaptureError(err);
         }
@@ -454,21 +518,31 @@ export default defineComponent({
       this.showArbitration = false;
       this.arbitrationConflicts = [];
       this.pendingConflicts = 0;
-      // Rafraîchit la table de labels après arbitrage.
-      this.labelRows = await invoke('get_label_rows');
-      this.filteredlabelRows = this.labelRows;
+      try {
+        // Rafraîchit la table de labels après arbitrage.
+        this.labelRows = await invoke('get_label_rows');
+        this.filteredlabelRows = filterLabelRows(this.labelRows, this.searchInput);
+      } catch (err) {
+        await displayCaptureError(err);
+      }
     },
 
     async openArbitration() {
-      this.arbitrationConflicts = await invoke<LabelConflictReport[]>('get_label_conflicts');
-      if (this.arbitrationConflicts.length > 0) {
-        this.showArbitration = true;
+      try {
+        this.arbitrationConflicts = await invoke<LabelConflictReport[]>('get_label_conflicts');
+        if (this.arbitrationConflicts.length > 0) {
+          this.showArbitration = true;
+        }
+      } catch (err) {
+        await displayCaptureError(err);
       }
     },
 
   },
 
   mounted() {
+    (this.$refs.panel as HTMLElement | undefined)?.focus();
+
     // NB : les imports ne touchent plus à isRunning (réservé à la capture
     // live) — leur cycle de vie passe par isImporting. L'ancien couplage aux
     // événements Started/Finished laissait isRunning bloqué à vrai si la
@@ -498,9 +572,6 @@ export default defineComponent({
   },
 
   beforeUnmount() {
-    for (const unsub of this.unsubs) unsub();
-    this.unsubs = [];
-
     if (this.unlistenDrop) {
       this.unlistenDrop();
       this.unlistenDrop = null;
@@ -847,6 +918,19 @@ export default defineComponent({
   color: white;
   font-size: 1.1rem;
   font-weight: 500;
+}
+
+.btn-cancel-import {
+  margin-top: 1.2rem;
+  border-color: #d8392b;
+}
+
+.btn-cancel-import:enabled:hover {
+  background-color: #313152;
+}
+
+.btn-cancel-import:active {
+  background-color: #d8392b;
 }
 
 .progress-group {

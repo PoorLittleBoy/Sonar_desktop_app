@@ -2,6 +2,158 @@
 
 ## Non publié
 
+## **[4.11.0] - 2026-08-04**
+
+## ✨ Améliorations
+
+- **Projets `.sonar` : sauvegarder et rouvrir un relevé complet** (#159) :
+  nouveau format de projet (archive contenant matrice SFMS, labels,
+  configuration de capture et manifeste versionné), boutons Enregistrer/
+  Ouvrir dans la barre du haut, écriture atomique. Les modifications non
+  enregistrées sont suivies : la fermeture et le reset ne demandent
+  confirmation que s'il y a réellement quelque chose à perdre.
+- **Autosave et récupération après crash** (#159) : le relevé en cours est
+  sauvegardé automatiquement toutes les 60 secondes dès qu'il change ; si
+  l'application ne s'est pas fermée proprement, la session suivante
+  propose de restaurer le dernier autosave.
+- **Projets récents** (#159) : les derniers projets ouverts et le dernier
+  dossier utilisé sont mémorisés entre les sessions.
+- **Le graphe distingue les VLAN** (#154, tranche 1) : deux équipements
+  portant la même IP sur deux VLAN 802.1Q sont désormais deux nœuds
+  distincts (le VLAN est affiché dans le libellé et le bandeau du nœud),
+  au lieu d'être fusionnés silencieusement. Une IP présente sur plusieurs
+  VLAN est signalée par une bordure ambre — fuite de segmentation ou
+  équipement multi-pattes, à investiguer — documentée dans la légende ;
+  la bordure rouge (plusieurs MAC pour une IP) garde priorité. Les
+  identifiants de nœuds sont désormais stables d'une ouverture à l'autre
+  (préparation de la corrélation d'actifs, #164). Les relevés CSV
+  existants profitent du graphe corrigé à la réouverture, sans migration.
+- **Labels sur toutes les MAC observées** (#154) : un label posé via une
+  MAC secondaire d'un nœud (équipement multi-MAC) est maintenant retrouvé
+  et appliqué ; la même identité vue sur deux VLAN est étiquetée sur les
+  deux nœuds.
+- **Analyse protocolaire mise à jour** : packet_parser 9.0.0 via
+  sonar-flows-core 0.5.0.
+
+## 🛠 Corrections
+
+- **Installation Debian/Ubuntu réparée** (#175) : le paquet `.deb` ne
+  déclarait pas libpcap dans ses dépendances ; sur une machine sans
+  libpcap déjà présente, SONAR s'installait mais ne démarrait pas.
+  `libpcap0.8` est désormais déclaré et installé automatiquement
+  (vérifié sur conteneur Debian trixie vierge).
+
+## **[4.10.0] - 2026-07-30**
+
+## ✨ Améliorations
+
+- **Annulation des imports PCAP en cours** (#161) : l'overlay de
+  progression propose un bouton « Annuler l'import ». L'annulation est
+  coopérative : le fichier en cours cesse d'être analysé, les fichiers
+  suivants ne sont pas ouverts et l'import étant transactionnel, le relevé
+  courant (matrice, graphe, labels) reste intact. L'issue est notifiée
+  comme une information, pas comme une erreur, et voyage dans le contrat
+  IPC typé (`import/cancelled`).
+- **Légende du graphe alignée sur le rendu** (#92) : les couleurs de la
+  légende sont désormais dérivées du même chemin Rust (`GraphData`) que
+  celui qui peint les nœuds, au lieu de recopier une palette séparée côté
+  frontend. Une gate CI régénère la palette exportée et échoue si le
+  worktree diverge, ce qui empêche légende et rendu de dériver
+  silencieusement l'un de l'autre.
+- **Dialogue « À propos » complet** (#89) : affiche désormais la
+  description, la licence, les auteurs et le dépôt du paquet, en plus des
+  versions de la chaîne de build, ainsi qu'un descriptif du format de
+  matrice SFMS (champs `count`, `total_bytes`, `last_seen`, `encap_id`,
+  `origin`).
+
+## 🛠 Corrections
+
+- **Un fichier sélectionné deux fois n'est plus importé deux fois** (#161) :
+  la déduplication se fait désormais sur l'identité réelle du fichier et
+  non sur la chaîne du chemin. Deux désignations d'un même fichier (chemin
+  relatif, composants `.`/`..`, lien symbolique) ne doublent plus ses
+  paquets dans la matrice ni sa provenance dans la colonne `origin`. Un
+  chemin introuvable reste conservé pour que l'import échoue avec son
+  message précis.
+- **Export des logs en une archive ZIP** (#102) : `export_logs` traitait
+  systématiquement la destination comme un dossier ; choisir « sonar.log »
+  dans le dialogue de sauvegarde créait un dossier `sonar.log/` au lieu du
+  fichier annoncé. La commande écrit maintenant une archive ZIP unique, via
+  écriture atomique (fichier temporaire puis renommage).
+- **Suppression des vues legacy cassées** (#145) : les anciennes vues
+  `Matrice.vue`, `Capture.vue` et `FromPcap.vue`, non routées et non
+  maintenues, sont retirées avec leurs routes mortes.
+
+## 🔧 Maintenance
+
+- **Rust 1.97.1** : alignement de la version Rust dans Cargo, Docker, la CI
+  et les fichiers `rust-toolchain.toml`, avec un toolchain dédié pour
+  `sonar-rust`, des contrôles anti-dérive renforcés et le vendor
+  crates.io/checksums inchangés.
+- **Interdiction des dépendances Cargo en version wildcard** (#124) : une
+  gate CI refuse désormais toute dépendance sans borne de version explicite.
+- **Durcissement des builds reproductibles Windows et épinglage du
+  toolchain Rust hors-ligne pour la couverture** (#174).
+
+## **[4.9.0] - 2026-07-28**
+
+## ✨ Améliorations
+
+- **Nœuds à fort volume mis en évidence dans le graphe** : la taille des
+  nœuds croît davantage avec le volume échangé (plafond relevé de 18 à
+  80 px et pente logarithmique accentuée), ce qui fait ressortir
+  immédiatement les équipements les plus bavards du réseau.
+- **Format SFMS documenté** : `SFMS.md` décrit le format v1 tel
+  qu'implémenté — préambule, colonnes et sémantique, extension tunnels,
+  provenance, règles d'import CSV/XLSX et protection tableur.
+
+## 🔒 Sécurité
+
+- **CSP stricte et capabilities en moindre privilège** : la politique de
+  sécurité de contenu interdit en production les styles inline, `data:`,
+  objets, formulaires et frames ; les capabilities Tauri perdent les accès
+  shell/os/process et les scopes fichiers récursifs sur les dossiers
+  personnels. La politique est verrouillée par des tests dédiés.
+- **Chaîne de release signée et vérifiable hors ligne** : la publication
+  produit un kit de vérification hors ligne (scripts bash et PowerShell,
+  racine de confiance Sigstore embarquée) permettant de contrôler
+  signatures et empreintes sans accès réseau, et un builder Windows
+  officiel signant via HSM est documenté et outillé.
+- **Assainissement Npcap des releases historiques** (#169) : retrait des
+  39 installateurs NSIS embarquant Npcap et des 119 tags exposant son
+  installeur dans les archives source, avec inventaire et manifestes
+  SHA-256 préservés.
+
+## 🛠 Corrections
+
+- **Erreurs de capture et de labels visibles** (#161) : toute erreur de
+  capture est affichée même si sa sérialisation échoue, les fichiers
+  resélectionnés sont dédupliqués avant import, un échec de rafraîchissement
+  ne masque plus l'erreur d'import d'origine, et l'édition optimiste d'un
+  label est annulée avec message si le backend la refuse.
+- **Réglages de capture typés** (#109) : le panneau de configuration
+  envoie un payload typé au backend au lieu de valeurs non contrôlées.
+- **Journalisation de production** (#112) : les diagnostics du frontend
+  (sessions périmées, contrat IPC, snapshots, erreurs graphe) passent par
+  `plugin-log` et rejoignent les logs de production au lieu de la console.
+
+## ✅ Tests
+
+- **Parcours complets rejoués sur le binaire release** : un harnais E2E
+  X11 pilote l'application de production (import PCAP, graphe, labels,
+  exports, reset), vérifie l'absence de violations CSP et de panics, et
+  archive captures et artefacts.
+
+## 🔧 Maintenance
+
+- **Reproductibilité prouvée entre conteneurs isolés** : deux builds
+  Docker indépendants du même commit produisent un binaire Linux au
+  SHA-256 identique ; le `sonar.exe` Windows est cross-compilé depuis le
+  même conteneur épinglé et rendu déterministe (GUID PDB figé puis debug
+  directory supprimé), avec un `repro-check.ps1` natif pour Windows.
+- Retrait de la dépendance frontend `chart.js`, devenue inutilisée.
+- Pins webkit Debian réalignés sur le snapshot (2.52.5-1~deb13u1).
+
 ## **[4.8.3] - 2026-07-27**
 
 ## ✨ Améliorations

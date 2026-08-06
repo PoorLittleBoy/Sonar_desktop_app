@@ -16,7 +16,7 @@
       <div v-if="captureStore.activeFilter" class="filter-badge" :title="captureStore.activeFilter">
         <span class="filter-icon">⚗</span>
         <span class="filter-text">{{ captureStore.activeFilter }}</span>
-        <button class="filter-clear" @click="clearFilter" title="Supprimer le filtre">✕</button>
+        <button type="button" class="filter-clear" @click="clearFilter" title="Supprimer le filtre">✕</button>
       </div>
       <p
         v-if="lastImport"
@@ -73,6 +73,7 @@ import Cpu from './Cpu.vue';
 
 import { useCaptureStore } from '../../../store/capture';
 import { invoke } from '@tauri-apps/api/core';
+import { error } from '@tauri-apps/plugin-log';
 import type { Stats } from '../../../types/capture';
 
 type StatsView = Record<
@@ -153,7 +154,7 @@ export default defineComponent({
         await invoke('set_filter', { filter: '' });
         this.captureStore.setActiveFilter('');
       } catch (e) {
-        console.error('clear filter failed:', e);
+        error(`clear filter failed: ${e}`);
       }
     },
   },

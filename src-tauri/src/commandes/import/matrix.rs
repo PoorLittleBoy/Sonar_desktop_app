@@ -315,6 +315,10 @@ pub fn import_matrix_files(
     // la matrice et le graphe pendant que le pipeline les alimente. La phase
     // `Importing` est réservée atomiquement et détenue jusqu'à la fin de la
     // commande, swap inclus (#139).
+    // Même garantie que pour les PCAP : une matrice fusionnée deux fois
+    // doublerait ses compteurs et dupliquerait sa provenance (#161).
+    let incoming_file_paths = super::dedupe_paths_by_identity(&incoming_file_paths);
+
     let import_guard = crate::state::capture::ImportGuard::acquire(
         capture_state.inner(),
         "import de matrice CSV/XLSX",
@@ -405,6 +409,11 @@ pub fn import_matrix_files(
     )?;
 
     import_guard.verify_current("commit de l'import de matrice")?;
+
+    // Le commit est certain à partir d'ici (le swap est une pure
+    // affectation) : relevé marqué modifié avant de prendre les verrous de
+    // données, `CaptureState` ne s'imbrique jamais avec eux (#166, #159).
+    capture_state.lock()?.mark_dirty();
 
     // Même ordre de verrouillage que convert_from_pcap_list et net_capture
     // (matrice -> graph -> label_store) pour éviter un interblocage ABBA.
@@ -809,6 +818,7 @@ mod tests {
             &mut graph,
             &on_event,
             &mut None,
+            &std::sync::atomic::AtomicBool::new(false),
         )
         .unwrap();
 

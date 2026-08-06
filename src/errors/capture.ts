@@ -68,7 +68,9 @@ export async function displayCaptureError(err: unknown) {
         break;
       case "capture": {
         const captureKind = captureError.message as CaptureErrorKind;
-        if ("kind" in captureKind) {
+        // Même garde objet/null que ci-dessus (#161) : le payload imbriqué
+        // peut aussi être non conforme au contrat, pas seulement le premier niveau.
+        if (typeof captureKind === "object" && captureKind !== null && "kind" in captureKind) {
           switch (captureKind.kind) {
             case "invalidConfig":
               userFriendlyMessage =
@@ -151,6 +153,8 @@ export function handleExportError(exportError: ExportErrorKind): string {
       return `Erreur d'écriture du fichier exporté : ${exportError.message}`;
     case "csv":
       return `Erreur d'écriture CSV : ${exportError.message}`;
+    case "zip":
+      return `Erreur d'écriture de l'archive ZIP : ${exportError.message}`;
     case "poisonError":
       return `Erreur verrou pendant l'export : ${exportError.message}`;
     case "logNotFound":
@@ -182,9 +186,23 @@ export function handleImportError(importError: ImportErrorKind): string {
       const [file, label] = importError.message;
       return `Type de liaison non supporté dans ${file} : ${label}.\nL'import a été annulé, la matrice courante est inchangée.`;
     }
+    case "cancelled":
+      return `Import annulé pendant ${importError.message}.\nLe relevé courant est inchangé.`;
     default:
       return `Erreur d'import inconnue : ${JSON.stringify(importError)}`;
   }
+}
+
+/** Vrai si l'erreur IPC est l'annulation d'import demandée par l'opérateur :
+ *  une issue normale à notifier comme telle, pas un défaut à afficher en
+ *  dialogue d'erreur. */
+export function isImportCancellation(err: unknown): boolean {
+  if (typeof err !== "object" || err === null || !("kind" in err)) return false;
+  const captureError = err as CaptureStateErrorKind;
+  if (captureError.kind !== "import") return false;
+  const importError = captureError.message as ImportErrorKind;
+  return typeof importError === "object" && importError !== null &&
+    "kind" in importError && importError.kind === "cancelled";
 }
 
 /// Formate une liste d'erreurs en la plafonnant : au-delà de `max` entrées
@@ -192,7 +210,27 @@ export function handleImportError(importError: ImportErrorKind): string {
 export function capList<T>(items: T[], format: (item: T) => string, max = 8): string {
   const shown = items.slice(0, max).map(format).join('\n');
   const rest = items.length - max;
-  return rest > 0 ? `${shown}\n… et ${rest} autre${rest > 1 ? 's' : ''}` : shown;
+  if (rest <= 0) return shown;
+  const plural = rest > 1 ? 's' : '';
+  return `${shown}\n… et ${rest} autre${plural}`;
+}
+
+// Formateurs des lignes détaillées de handleLabelerror, extraits pour éviter
+// des template literals imbriqués dans les callbacks passés à capList.
+function formatInvalidField([line, value, row]: InvalidFieldValue): string {
+  return `ligne ${line}: ${value} | ${row}`;
+}
+
+function formatMacConflict([lineA, lineB, ip, refMac, mac]: LabelConflictRow): string {
+  return `lignes ${lineA}/${lineB} - ${ip} : ${refMac} <-> ${mac}`;
+}
+
+function formatLabelConflict([lineA, lineB, ip, refLabel, label]: LabelConflictRow): string {
+  return `lignes ${lineA}/${lineB} - ${ip} : ${refLabel} <-> ${label}`;
+}
+
+function formatInvalidRow([line, value]: InvalidLineValue): string {
+  return `ligne ${line}: ${value}`;
 }
 
 export function handleLabelerror(labelError: LabelErrorKind): string {
@@ -207,10 +245,10 @@ export function handleLabelerror(labelError: LabelErrorKind): string {
       const [invalidMac, invalidIp] = labelError.message;
       const parts = [];
       if (invalidMac.length > 0) {
-        parts.push(`MAC invalides (${invalidMac.length}) :\n${capList(invalidMac, ([line, mac, row]) => `ligne ${line}: ${mac} | ${row}`)}`);
+        parts.push(`MAC invalides (${invalidMac.length}) :\n${capList(invalidMac, formatInvalidField)}`);
       }
       if (invalidIp.length > 0) {
-        parts.push(`IP invalides (${invalidIp.length}) :\n${capList(invalidIp, ([line, ip, row]) => `ligne ${line}: ${ip} | ${row}`)}`);
+        parts.push(`IP invalides (${invalidIp.length}) :\n${capList(invalidIp, formatInvalidField)}`);
       }
       return `Formats invalides.\n${parts.join('\n\n')}`;
     }
@@ -218,15 +256,15 @@ export function handleLabelerror(labelError: LabelErrorKind): string {
       const [sameIpDiffMac, sameIpDiffLabel] = labelError.message;
       const parts = [];
       if (sameIpDiffMac.length > 0) {
-        parts.push(`même IP, MAC différent (${sameIpDiffMac.length}) :\n${capList(sameIpDiffMac, ([lineA, lineB, ip, ref_mac, mac]) => `lignes ${lineA}/${lineB} - ${ip} : ${ref_mac} <-> ${mac}`)}`);
+        parts.push(`même IP, MAC différent (${sameIpDiffMac.length}) :\n${capList(sameIpDiffMac, formatMacConflict)}`);
       }
       if (sameIpDiffLabel.length > 0) {
-        parts.push(`même IP, label différent (${sameIpDiffLabel.length}) :\n${capList(sameIpDiffLabel, ([lineA, lineB, ip, ref_label, label]) => `lignes ${lineA}/${lineB} - ${ip} : ${ref_label} <-> ${label}`)}`);
+        parts.push(`même IP, label différent (${sameIpDiffLabel.length}) :\n${capList(sameIpDiffLabel, formatLabelConflict)}`);
       }
       return `Conflits dans les lignes de labels.\n${parts.join('\n\n')}\n<Importation impossible>`;
     }
     case "invalidRowsFormat":
-      return `Format de fichier invalide. Attendu au moins "mac, ip, label" (colonnes suivantes ajoutées au label).\n${capList(labelError.message, ([line, value]) => `ligne ${line}: ${value}`)}`
+      return `Format de fichier invalide. Attendu au moins "mac, ip, label" (colonnes suivantes ajoutées au label).\n${capList(labelError.message, formatInvalidRow)}`
     case "editRejected":
       return `Édition refusée : ${labelError.message}`;
     default:

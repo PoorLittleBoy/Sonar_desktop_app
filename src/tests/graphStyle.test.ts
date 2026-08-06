@@ -7,12 +7,15 @@ import { deepStrictEqual as assertEquals } from "node:assert/strict";
 import { DEFAULT_EDGE_CURVATURE } from "@sigma/edge-curve";
 
 import {
+  DUPLICATE_IP_BORDER_COLOR,
   MAC_CONFLICT_BORDER_COLOR,
+  NODE_SIZE_MAX,
   NODE_SIZE_MIN,
   brighten,
   darken,
   edgeAttributes,
   edgeKey,
+  edgeLabelFor,
   edgeSizeFor,
   formatBytes,
   getCurvature,
@@ -30,6 +33,8 @@ function node(overrides: Partial<Node> = {}): Node {
     mac: "",
     macs: [],
     ip: "",
+    vlan_id: null,
+    duplicate_ip: false,
     label: null,
     ...overrides,
   };
@@ -102,13 +107,16 @@ Deno.test("nodeSizeFor - trafic nul -> taille minimale", () => {
   assertEquals(nodeSizeFor(0), NODE_SIZE_MIN);
 });
 
-Deno.test("nodeSizeFor - croît avec le trafic puis plafonne à 18", () => {
+Deno.test("nodeSizeFor - distingue les gros volumes puis plafonne à la taille maximale", () => {
   const small = nodeSizeFor(1_000);
   const big = nodeSizeFor(1_000_000);
-  const huge = nodeSizeFor(1e12);
+  const veryBig = nodeSizeFor(1_000_000_000);
+  const huge = nodeSizeFor(1e18);
 
   assertEquals(small < big, true, `small=${small} big=${big}`);
-  assertEquals(huge, 18);
+  assertEquals(big < veryBig, true, `big=${big} veryBig=${veryBig}`);
+  assertEquals(veryBig > 40, true, `veryBig=${veryBig}`);
+  assertEquals(huge, NODE_SIZE_MAX);
 });
 
 Deno.test("edgeSizeFor - trafic nul -> taille minimale, plafonne à 7", () => {
@@ -165,6 +173,28 @@ Deno.test("nodeAttributes - plusieurs MAC -> conflit signalé par la bordure d'a
   assertEquals(attrs.borderColor, MAC_CONFLICT_BORDER_COLOR);
 });
 
+Deno.test("nodeAttributes - VLAN affiché dans le libellé et exposé en attribut (#154)", () => {
+  const attrs = nodeAttributes(node({ name: "192.168.1.10", vlan_id: 42 }));
+  assertEquals(attrs.vlanId, 42);
+  assertEquals(attrs.label, "192.168.1.10 (VLAN 42)");
+
+  const untagged = nodeAttributes(node({ name: "192.168.1.10" }));
+  assertEquals(untagged.vlanId, null);
+  assertEquals(untagged.label, "192.168.1.10");
+});
+
+Deno.test("nodeAttributes - IP dupliquée -> bordure ambre, le conflit MAC garde priorité (#154)", () => {
+  const attrs = nodeAttributes(node({ duplicate_ip: true }));
+  assertEquals(attrs.duplicateIp, true);
+  assertEquals(attrs.borderColor, DUPLICATE_IP_BORDER_COLOR);
+
+  const both = nodeAttributes(node({
+    duplicate_ip: true,
+    macs: ["aa:bb:cc:dd:ee:ff", "11:22:33:44:55:66"],
+  }));
+  assertEquals(both.borderColor, MAC_CONFLICT_BORDER_COLOR);
+});
+
 Deno.test("edgeAttributes - champs par défaut sur une arête minimale", () => {
   const attrs = edgeAttributes(edge({ label: "TCP", totalBytes: 0 }));
   assertEquals(attrs.protocol, "TCP");
@@ -183,4 +213,34 @@ Deno.test("edgeAttributes - transmet ports/tunnels tels quels", () => {
   assertEquals(attrs.has_dynamic_ports, true);
   assertEquals(attrs.encapIds, ["enc-1"]);
   assertEquals(attrs.total_bytes, 12345);
+});
+
+Deno.test("edgeLabelFor - ports masqués -> seulement le protocole", () => {
+  assertEquals(edgeLabelFor({ protocol: "TCP", ports: [80] }, false), "TCP");
+});
+
+Deno.test("edgeLabelFor - ports affichés, liste de ports -> protocole + ports triés", () => {
+  assertEquals(edgeLabelFor({ protocol: "TCP", ports: [80, 443] }, true), "TCP :80,443");
+});
+
+Deno.test("edgeLabelFor - ports affichés, ports dynamiques mêlés à des ports listés -> suffixe …", () => {
+  assertEquals(
+    edgeLabelFor({ protocol: "TCP", ports: [80], has_dynamic_ports: true }, true),
+    "TCP :80,…"
+  );
+});
+
+Deno.test("edgeLabelFor - ports affichés, uniquement dynamiques -> pas de liste", () => {
+  assertEquals(edgeLabelFor({ protocol: "TCP", ports: [], has_dynamic_ports: true }, true), "TCP :…");
+});
+
+Deno.test("edgeLabelFor - ports affichés, ports source/destination sans liste -> flèche", () => {
+  assertEquals(
+    edgeLabelFor({ protocol: "TCP", ports: [], source_port: 51234, destination_port: 443 }, true),
+    "TCP 51234→443"
+  );
+});
+
+Deno.test("edgeLabelFor - ports affichés, rien à montrer -> seulement le protocole", () => {
+  assertEquals(edgeLabelFor({ protocol: "ICMP", ports: [] }, true), "ICMP");
 });

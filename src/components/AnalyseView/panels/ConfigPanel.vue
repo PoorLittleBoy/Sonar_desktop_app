@@ -4,91 +4,129 @@
   (commande config_capture).
 -->
 <template>
-  <div class="config-panel">
+  <div
+    class="config-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Configuration Capture"
+    ref="panel"
+    tabindex="-1"
+    @keydown.esc="close"
+  >
     <h2>Configuration Capture</h2>
 
-    <InterfaceSelector 
+    <InterfaceSelector
       v-model="selectedInterface"
       :net-interfaces="netInterfaces"
       class="config-item"
     />
 
     <div class="config-item">
-      <label>
+      <label for="config-buffer-size">
         Taille du buffer :
-        <span
+        <button
+          type="button"
           class="help-tooltip"
-          tabindex="0"
           aria-label="Taille du buffer kernel pcap, en octets. Plus il est grand, plus SONAR absorbe les pics de trafic sans perte côté système."
           data-tooltip="Buffer kernel pcap, en octets. Plus il est grand, plus SONAR absorbe les pics de trafic sans perte côté système."
-        >?</span>
+        >?</button>
       </label>
-      <input type="number" v-model.number="bufferSize" min="65536" max="536870912" step="1024" />
+      <input id="config-buffer-size" type="number" v-model.number="bufferSize" min="65536" max="536870912" step="1024" />
     </div>
 
     <div class="config-item">
-      <label>
+      <label for="config-chan-capacity">
         Nombre de buffers:
-        <span
+        <button
+          type="button"
           class="help-tooltip"
-          tabindex="0"
           aria-label="Capacité du canal interne entre capture et traitement. Trop petit, l'application peut perdre des paquets sous charge; trop grand, elle consomme plus de mémoire."
           data-tooltip="Capacité du canal interne entre capture et traitement. Trop petit, l'application peut perdre des paquets sous charge; trop grand, elle consomme plus de mémoire."
-        >?</span>
+        >?</button>
       </label>
-      <input type="number" v-model.number="chanCapacity" min="1" max="1000000" />
+      <input id="config-chan-capacity" type="number" v-model.number="chanCapacity" min="1" max="1000000" />
     </div>
 
     <div class="config-item">
-      <label>
+      <label for="config-timeout">
         Timeout (ms) :
-        <span
+        <button
+          type="button"
           class="help-tooltip"
-          tabindex="0"
           aria-label="Délai pcap avant livraison des paquets. Petit, il réduit la latence; plus grand, il favorise le batching."
           data-tooltip="Délai pcap avant livraison des paquets. Petit, il réduit la latence; plus grand, il favorise le batching."
-        >?</span>
+        >?</button>
       </label>
-      <input type="number" v-model.number="timeout" min="1" max="10000" />
+      <input id="config-timeout" type="number" v-model.number="timeout" min="1" max="10000" />
     </div>
 
     <div class="config-item">
-      <label>
+      <label for="config-snaplen">
         Taille du snaplen :
-        <span
+        <button
+          type="button"
           class="help-tooltip"
-          tabindex="0"
           aria-label="Nombre maximum d'octets capturés par paquet. Grand, il garde les paquets complets; petit, il réduit CPU et mémoire mais peut tronquer le décodage."
           data-tooltip="Nombre maximum d'octets capturés par paquet. Grand, il garde les paquets complets; petit, il réduit CPU et mémoire mais peut tronquer le décodage."
-        >?</span>
+        >?</button>
       </label>
-      <input type="number" v-model.number="snaplen" min="64" max="262144" />
+      <input id="config-snaplen" type="number" v-model.number="snaplen" min="64" max="262144" />
     </div>
 
     <div class="actions">
-      <button @click="save" :disabled="!selectedInterface">Sauvegarder</button>
-      <button @click="close">Fermer</button>
+      <button type="button" @click="save" :disabled="!selectedInterface">Sauvegarder</button>
+      <button type="button" @click="close">Fermer</button>
     </div>
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import { info } from "@tauri-apps/plugin-log";
 import { invoke } from "@tauri-apps/api/core";
+import { defineComponent } from "vue";
 import { displayCaptureError } from "../../../errors/capture";
 import { useCaptureConfigStore } from "../../../store/capture";
-import { DEFAULT_CAPTURE_CONFIG } from "../../../types/config";
+import { DEFAULT_CAPTURE_CONFIG, type CaptureConfig } from "../../../types/config";
+import type { NetDevice } from "../../../types/NetDevice";
 import InterfaceSelector from "./CustomSelector/interfaceSelector.vue";
 
-export default {
+type ConfigPanelState = {
+  netInterfaces: NetDevice[];
+  selectedInterface: NetDevice | null;
+  deviceName: string;
+  bufferSize: number;
+  chanCapacity: number;
+  timeout: number;
+  snaplen: number;
+};
+
+type CaptureNumericConfig = Omit<CaptureConfig, "device_name">;
+
+function normalizeCaptureConfig(
+  selectedInterface: NetDevice | null,
+  values: CaptureNumericConfig,
+): CaptureConfig | null {
+  const deviceName = selectedInterface?.name.trim();
+  if (!deviceName) return null;
+
+  return {
+    device_name: deviceName,
+    buffer_size: Number(values.buffer_size),
+    chan_capacity: Number(values.chan_capacity),
+    timeout: Number(values.timeout),
+    snaplen: Number(values.snaplen),
+  };
+}
+
+export default defineComponent({
   name: "ConfigPanel",
   components: { InterfaceSelector },
   emits: ["update:ConfigPanel-visible"],
 
-  data() {
+  data(): ConfigPanelState {
     return {
-      netInterfaces: [],
-      selectedInterface: null,
+      netInterfaces: [] as NetDevice[],
+      selectedInterface: null as NetDevice | null,
       deviceName: "",
       bufferSize: DEFAULT_CAPTURE_CONFIG.buffer_size,
       chanCapacity: DEFAULT_CAPTURE_CONFIG.chan_capacity,
@@ -104,17 +142,17 @@ export default {
   },
 
   methods: {
-    syncSelectedInterface() {
+    syncSelectedInterface(): void {
       if (!this.deviceName || !this.netInterfaces.length) return;
       this.selectedInterface = this.netInterfaces.find((iface) => iface.name === this.deviceName) || null;
     },
 
-    async getConfig() {
+    async getConfig(): Promise<void> {
       try {
-        const config = await invoke("get_config_capture");
+        const config = await invoke<CaptureConfig>("get_config_capture");
         info(`[ConfigPanel] config=${JSON.stringify(config)}`);
 
-        this.deviceName = config.device_name || "";
+        this.deviceName = config.device_name;
         this.bufferSize = config.buffer_size;
         this.chanCapacity = config.chan_capacity;
         this.timeout = config.timeout;
@@ -127,17 +165,24 @@ export default {
       }
     },
 
-    async loadInterfaces() {
+    async loadInterfaces(): Promise<void> {
       try {
-        this.netInterfaces = await invoke("get_devices_list");
+        this.netInterfaces = await invoke<NetDevice[]>("get_devices_list");
         this.syncSelectedInterface();
       } catch (err) {
         await displayCaptureError(err);
       }
     },
 
-    async save() {
-      if (!this.selectedInterface?.name) {
+    async save(): Promise<void> {
+      const payload = normalizeCaptureConfig(this.selectedInterface, {
+        buffer_size: this.bufferSize,
+        chan_capacity: this.chanCapacity,
+        timeout: this.timeout,
+        snaplen: this.snaplen,
+      });
+
+      if (!payload) {
         await displayCaptureError({
           kind: "capture",
           message: { kind: "invalidConfig", message: "interface réseau obligatoire" },
@@ -146,15 +191,9 @@ export default {
       }
 
       try {
-        const config = await invoke("config_capture", {
-          device_name: this.selectedInterface.name,
-          buffer_size: Number(this.bufferSize),
-          chan_capacity: Number(this.chanCapacity),
-          timeout: Number(this.timeout),
-          snaplen: Number(this.snaplen),
-        });
+        const config = await invoke<CaptureConfig>("config_capture", payload);
 
-        this.deviceName = config.device_name || "";
+        this.deviceName = config.device_name;
         this.bufferSize = config.buffer_size;
         this.chanCapacity = config.chan_capacity;
         this.timeout = config.timeout;
@@ -167,7 +206,7 @@ export default {
       }
     },
 
-    close() {
+    close(): void {
       this.$emit("update:ConfigPanel-visible", false);
     },
   },
@@ -175,17 +214,18 @@ export default {
   mounted() {
     this.loadInterfaces();
     this.getConfig();
+    (this.$refs.panel as HTMLElement | undefined)?.focus();
   },
 
   watch: {
-    selectedInterface(nextInterface) {
+    selectedInterface(nextInterface: NetDevice | null) {
       this.deviceName = nextInterface?.name || "";
     },
     netInterfaces() {
       this.syncSelectedInterface();
     },
   },
-};
+});
 </script>
 
 <style scoped>
@@ -239,10 +279,12 @@ export default {
   justify-content: center;
   width: 18px;
   height: 18px;
+  padding: 0;
   border: 1px solid #8a8a8a;
   border-radius: 50%;
   color: #ffffff;
   background-color: #303744;
+  font-family: inherit;
   font-size: 12px;
   line-height: 1;
   cursor: help;
@@ -344,7 +386,9 @@ select:focus {
   border: none;
   border-radius: 5px;
   cursor: pointer;
-  background-color: #007bff;
+  /* #007bff était sous le seuil WCAG AA avec du texte blanc (3.98:1) ;
+     même bleu, légèrement assombri pour passer 4.5:1. */
+  background-color: #0071eb;
   color: white;
   font-weight: bold;
   transition: background-color 0.2s;

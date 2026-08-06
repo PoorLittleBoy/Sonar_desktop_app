@@ -25,7 +25,9 @@ import {
   EDGE_LABEL_ZOOM,
   PORT_LABEL_ZOOM,
   drawNodeLabel,
+  edgeLabelFor,
   nodeAttributes,
+  randomFloat,
 } from "./graph/graphStyle"
 import {
   logUnknownGraphUpdateType,
@@ -212,21 +214,32 @@ export default defineComponent({
     },
 
     // === Reducers Sigma (état de survol/sélection -> rendu) ================
+    // Sigma appelle ces reducers pour chaque nœud/arête à chaque frame (donc
+    // en continu tant que ForceAtlas2 tourne, par défaut activé) : un chemin
+    // rapide qui renvoie `data` tel quel sans le copier évite une allocation
+    // par élément et par frame quand rien ne doit être surchargé.
     nodeReducer(node: string, data: NodeRenderAttributes): NodeRenderAttributes {
-      const res: NodeRenderAttributes = { ...data }
       const tunnelNodes = this.hoveredTunnelNodes
-      if (tunnelNodes && !tunnelNodes.has(node)) {
+      const dimmed = !!tunnelNodes && !tunnelNodes.has(node)
+      const isHovered = node === this.hoveredNode
+      const isSelected = node === this.selectedNodeId
+      if (!dimmed && !isHovered && !isSelected) return data
+
+      const res: NodeRenderAttributes = { ...data }
+      if (dimmed) {
         res.color = DIM_NODE_COLOR
         res.label = null
       }
-      if (node === this.hoveredNode) res.color = data.hoverColor ?? res.color
-      if (node === this.selectedNodeId) res.highlighted = true
+      if (isHovered) res.color = data.hoverColor ?? res.color
+      if (isSelected) res.highlighted = true
       return res
     },
 
     edgeReducer(edge: string, data: EdgeRenderAttributes): EdgeRenderAttributes {
-      const res: EdgeRenderAttributes = { ...data }
       const tunnelEdges = this.hoveredTunnelEdges
+      if (!tunnelEdges && !this._edgeLabelsShown) return data
+
+      const res: EdgeRenderAttributes = { ...data }
       const dimmed = !!tunnelEdges && !tunnelEdges.has(edge)
       if (tunnelEdges) {
         if (dimmed) {
@@ -237,26 +250,7 @@ export default defineComponent({
           res.size = (data.size || 1) + 1
         }
       }
-      if (!this._edgeLabelsShown || dimmed) {
-        res.label = null
-        return res
-      }
-      let label = data.protocol ?? ""
-      if (this._portLabelsShown) {
-        const ports: number[] = Array.isArray(data.ports) ? data.ports : []
-        const hasDynamic = data.has_dynamic_ports === true
-        if (ports.length > 0) {
-          // Ports « service » de l'arête (les éphémères ne sont pas listés,
-          // le backend les résume par has_dynamic_ports → « … »).
-          label += ` :${ports.join(",")}${hasDynamic ? ",…" : ""}`
-        } else if (hasDynamic) {
-          // Uniquement du trafic sur ports dynamiques : signalé sans liste.
-          label += " :…"
-        } else if (data.source_port != null || data.destination_port != null) {
-          label += ` ${data.source_port ?? ""}→${data.destination_port ?? ""}`
-        }
-      }
-      res.label = label
+      res.label = (!this._edgeLabelsShown || dimmed) ? null : edgeLabelFor(data, this._portLabelsShown)
       return res
     },
 
@@ -335,6 +329,14 @@ export default defineComponent({
       this.graph?.clear()
       this.clearNodeInfos()
       this.unpinTunnelHighlight()
+      // Vide les updates de capture live déjà en file : sans ça, un update
+      // mis en attente avant le reset peut être rejoué sur le graphe qui
+      // vient d'être rechargé (nouveau fichier/snapshot).
+      this._queue.length = 0
+      if (this._raf) {
+        cancelAnimationFrame(this._raf)
+        this._raf = 0
+      }
     },
 
     /**
@@ -369,8 +371,8 @@ export default defineComponent({
           const radius = 100 + Math.sqrt(n) * 40
           this.graph.addNode(id, {
             ...nodeAttributes({ ...node, id }),
-            x: Math.cos(angle) * radius + (Math.random() - 0.5) * 30,
-            y: Math.sin(angle) * radius + (Math.random() - 0.5) * 30,
+            x: Math.cos(angle) * radius + (randomFloat() - 0.5) * 30,
+            y: Math.sin(angle) * radius + (randomFloat() - 0.5) * 30,
           })
         }
 
@@ -546,8 +548,8 @@ export default defineComponent({
 <template>
   <div class="graph-container">
     <div class="top-buttons">
-      <button class="download-button" @click="downloadPng" title="Exporter en PNG">⬇️ Export PNG</button>
-      <button
+      <button type="button" class="download-button" @click="downloadPng" title="Exporter en PNG">⬇️ Export PNG</button>
+      <button type="button"
         class="force-button"
         :class="{ on: forceEnabled }"
         @click="toggleForce"
@@ -568,7 +570,7 @@ export default defineComponent({
         <div class="tunnel-info">🚇 {{ tunnelHoverInfo }}</div>
       </template>
       <div class="sep" />
-      <button class="download-button" @click="showLabelsPanel = true" title="afficher les labels">Afficher les labels</button>
+      <button type="button" class="download-button" @click="showLabelsPanel = true" title="afficher les labels">Afficher les labels</button>
       <div class="sep" />
       <div class="node-infos" v-if="selectedNodeInfos.length">
         <strong>Nœud sélectionné</strong>
@@ -583,7 +585,7 @@ export default defineComponent({
             placeholder="Entrer un label…"
             @keydown="onEditKeydown"
           />
-          <button
+          <button type="button"
             class="primary"
             :disabled="isSavingLabel || !selectedNode"
             @click="editNodeLabel"
@@ -591,7 +593,7 @@ export default defineComponent({
           >
             {{ isSavingLabel ? "Enregistrement…" : "Enregistrer" }}
           </button>
-          <button class="ghost" @click="cancelEdit" :disabled="isSavingLabel">Annuler</button>
+          <button type="button" class="ghost" @click="cancelEdit" :disabled="isSavingLabel">Annuler</button>
         </div>
 
         <ul>

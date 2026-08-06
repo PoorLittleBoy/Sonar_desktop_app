@@ -28,11 +28,12 @@ use crate::{
             update_label,
         },
         import::{
-            LabelConflictStore, clear_label_store, convert_from_pcap_list, get_label_conflicts,
-            get_label_rows, import_label_file, import_matrix_file, import_matrix_files,
-            is_matrix_empty, resolve_label_conflicts,
+            LabelConflictStore, cancel_import, clear_label_store, convert_from_pcap_list,
+            get_label_conflicts, get_label_rows, import_label_file, import_matrix_file,
+            import_matrix_files, is_matrix_empty, resolve_label_conflicts,
         },
         net_capture::{reset_capture, set_filter},
+        project::{get_recovery_offer, is_session_dirty, open_project, save_project},
     },
     setup::{
         about::{about_message, changelog_message},
@@ -59,6 +60,49 @@ mod utils;
 
 // Exposé pour le benchmark `examples/pool_bench.rs`.
 pub use state::capture::capture_handle::threads::packet_buffer;
+
+/// Gère les clics du menu natif (À propos, Changelog, Fermer).
+fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
+    if event.id() == "version" {
+        app.dialog()
+            .message(about_message())
+            .title("À propos de SONAR")
+            .kind(MessageDialogKind::Info)
+            .buttons(MessageDialogButtons::Ok)
+            .show(|_| {});
+    } else if event.id() == "changelog" {
+        app.dialog()
+            .message(changelog_message())
+            .title("Changelog")
+            .kind(MessageDialogKind::Info)
+            .buttons(MessageDialogButtons::Ok)
+            .show(|_| {});
+    } else if event.id() == "fermer" {
+        if let Some(window) = app.get_webview_window("main") {
+            if let Err(close_error) = window.close() {
+                error!("Failed to close main window: {close_error}");
+            }
+        } else {
+            app.exit(0);
+        }
+    }
+}
+
+/// Recharge la configuration de capture persistée au démarrage, si présente.
+fn restore_persisted_capture_config(app: &tauri::AppHandle) {
+    let capture_state = app.state::<Arc<Mutex<CaptureState>>>();
+    match CaptureConfig::load_persisted(app) {
+        Ok(Some(config)) => match capture_state.lock() {
+            Ok(mut state) => {
+                info!("Configuration capture chargée depuis le disque");
+                state.config = config;
+            }
+            Err(err) => error!("Impossible de charger la configuration capture: {err}"),
+        },
+        Ok(None) => {}
+        Err(err) => error!("Configuration capture persistée ignorée: {err}"),
+    }
+}
 
 /// Point d'entrée de l'application : configure les plugins, l'état partagé,
 /// le menu et la fenêtre, puis démarre la boucle Tauri.
@@ -92,37 +136,17 @@ pub fn run() -> Result<(), tauri::Error> {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        // Récents et préférences UI uniquement : le plugin écrit en
+        // `fs::write` direct (non atomique, vérifié dans la source vendorée
+        // 2.4.4) — la config de capture reste sur notre persistance atomique.
+        .plugin(tauri_plugin_store::Builder::default().build())
         .manage(Arc::new(Mutex::new(CaptureState::new())))
         .manage(Arc::new(Mutex::new(FlowMatrix::new())))
         .manage(Arc::new(Mutex::new(GraphData::new())))
         .manage(Arc::new(Mutex::new(PcInfoLabel::new())))
         .manage(Arc::new(Mutex::new(LabelStore::new())))
         .manage(Arc::new(Mutex::new(LabelConflictStore::default())))
-        .on_menu_event(|app, event| {
-            if event.id() == "version" {
-                app.dialog()
-                    .message(about_message())
-                    .title("Version")
-                    .kind(MessageDialogKind::Info)
-                    .buttons(MessageDialogButtons::Ok)
-                    .show(|_| {});
-            } else if event.id() == "changelog" {
-                app.dialog()
-                    .message(changelog_message())
-                    .title("Changelog")
-                    .kind(MessageDialogKind::Info)
-                    .buttons(MessageDialogButtons::Ok)
-                    .show(|_| {});
-            } else if event.id() == "fermer" {
-                if let Some(window) = app.get_webview_window("main") {
-                    if let Err(close_error) = window.close() {
-                        error!("Failed to close main window: {close_error}");
-                    }
-                } else {
-                    app.exit(0);
-                }
-            }
-        })
+        .on_menu_event(handle_menu_event)
         .setup({
             move |app| {
                 info!("{}", print_banner());
@@ -131,23 +155,17 @@ pub fn run() -> Result<(), tauri::Error> {
                 info!("Reading labels...");
                 read_labels(app.handle())?;
 
-                let capture_state = app.state::<Arc<Mutex<CaptureState>>>();
-                match CaptureConfig::load_persisted(app.handle()) {
-                    Ok(Some(config)) => match capture_state.lock() {
-                        Ok(mut state) => {
-                            info!("Configuration capture chargée depuis le disque");
-                            state.config = config;
-                        }
-                        Err(err) => error!("Impossible de charger la configuration capture: {err}"),
-                    },
-                    Ok(None) => {}
-                    Err(err) => error!("Configuration capture persistée ignorée: {err}"),
-                }
+                restore_persisted_capture_config(app.handle());
+
+                // Persistance de session (#159) : offre de récupération
+                // figée AVANT la pose de la sentinelle, puis autosave.
+                let recovery_offer = commandes::project::init_session_persistence(app.handle());
+                app.manage(recovery_offer);
 
                 let _ = start_cpu_monitor(app.handle().clone());
 
-                let apropos = SubmenuBuilder::new(app, "A propos")
-                    .text("version", "Version")
+                let apropos = SubmenuBuilder::new(app, "À propos")
+                    .text("version", "À propos de SONAR")
                     .text("changelog", "Changelog")
                     .build()?;
 
@@ -185,6 +203,7 @@ pub fn run() -> Result<(), tauri::Error> {
             reset_capture,
             export_logs,
             convert_from_pcap_list,
+            cancel_import,
             add_label,
             update_label,
             delete_label,
@@ -199,7 +218,20 @@ pub fn run() -> Result<(), tauri::Error> {
             import_matrix_file,
             import_matrix_files,
             clear_label_store,
-            is_matrix_empty
+            is_matrix_empty,
+            save_project,
+            open_project,
+            is_session_dirty,
+            get_recovery_offer
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())?
+        .run(|app_handle, event| {
+            // Fermeture propre : sentinelle retirée, le prochain démarrage
+            // ne proposera pas de récupération (#159). Un crash ne passe pas
+            // ici — c'est exactement le signal recherché.
+            if let tauri::RunEvent::Exit = event {
+                commandes::project::remove_session_lock(app_handle);
+            }
+        });
+    Ok(())
 }

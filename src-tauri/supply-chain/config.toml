@@ -160,14 +160,26 @@ criteria = "safe-to-deploy"
 version = "4.6.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.clap]]
+version = "4.6.5"
+criteria = "safe-to-deploy"
+
 [[exemptions.clap_builder]]
 version = "4.6.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.clap_builder]]
+version = "4.6.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.clap_derive]]
 version = "4.6.1"
 criteria = "safe-to-deploy"
 notes = "Bootstrap du workspace sonar-rust le 23/07/2026 ; audit approfondi en attente."
+
+[[exemptions.clap_derive]]
+version = "4.6.4"
+criteria = "safe-to-deploy"
 
 [[exemptions.clap_lex]]
 version = "1.1.0"
@@ -846,7 +858,7 @@ version = "1.2.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.packet_parser]]
-version = "8.1.0"
+version = "9.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.pango]]
@@ -1125,7 +1137,7 @@ version = "0.4.8"
 criteria = "safe-to-deploy"
 
 [[exemptions.sonar-flows-core]]
-version = "0.3.2"
+version = "0.5.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.soup3]]
@@ -1240,6 +1252,10 @@ criteria = "safe-to-deploy"
 version = "2.3.5"
 criteria = "safe-to-deploy"
 
+[[exemptions.tauri-plugin-store]]
+version = "2.4.4"
+criteria = "safe-to-deploy"
+
 [[exemptions.tauri-runtime]]
 version = "2.11.3"
 criteria = "safe-to-deploy"
@@ -1310,6 +1326,10 @@ criteria = "safe-to-deploy"
 version = "1.53.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.tokio-macros]]
+version = "2.7.2"
+criteria = "safe-to-deploy"
+
 [[exemptions.tokio-util]]
 version = "0.7.18"
 criteria = "safe-to-deploy"
@@ -1368,6 +1388,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.tracing]]
 version = "0.1.44"
+criteria = "safe-to-deploy"
+
+[[exemptions.tracing-attributes]]
+version = "0.1.31"
 criteria = "safe-to-deploy"
 
 [[exemptions.tracing-core]]

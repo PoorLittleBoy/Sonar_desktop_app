@@ -6,7 +6,7 @@ import { Edge, EdgeData, EdgeId, Node } from "../../../types/capture"
 import { colorForProtocol } from "../../../utils/protocolColors"
 
 // --- Couleurs ---------------------------------------------------------------
-function clamp01(x: number) { return x < 0 ? 0 : x > 1 ? 1 : x }
+function clamp01(x: number) { return Math.min(1, Math.max(0, x)) }
 
 function hexToRgb(hex: string) {
   const h = hex.startsWith("#") ? hex.slice(1) : hex
@@ -20,15 +20,15 @@ function rgbToHex(r: number, g: number, b: number) {
 
 export function darken(hex: string, factor = 0.2) {
   const { r, g, b } = hexToRgb(hex)
-  return rgbToHex((r * (1 - factor)) | 0, (g * (1 - factor)) | 0, (b * (1 - factor)) | 0)
+  return rgbToHex(Math.trunc(r * (1 - factor)), Math.trunc(g * (1 - factor)), Math.trunc(b * (1 - factor)))
 }
 
 export function brighten(hex: string, factor = 0.15) {
   const { r, g, b } = hexToRgb(hex)
   return rgbToHex(
-    (clamp01(r / 255 + factor) * 255) | 0,
-    (clamp01(g / 255 + factor) * 255) | 0,
-    (clamp01(b / 255 + factor) * 255) | 0
+    Math.trunc(clamp01(r / 255 + factor) * 255),
+    Math.trunc(clamp01(g / 255 + factor) * 255),
+    Math.trunc(clamp01(b / 255 + factor) * 255)
   )
 }
 
@@ -39,6 +39,10 @@ export const DIM_NODE_COLOR = "#3a3a3a"
 // Bordure d'alerte : IP observée avec plusieurs MAC (anomalie à investiguer)
 export const MAC_CONFLICT_BORDER_COLOR = "#FF5252"
 
+// Bordure d'alerte : même IP portée par plusieurs nœuds (VLAN différents,
+// #154). Moins sévère que le conflit de MAC (qui garde priorité) : ambre.
+export const DUPLICATE_IP_BORDER_COLOR = "#FFB300"
+
 // --- Clés d'arêtes ----------------------------------------------------------
 const EDGE_SEP = "__"
 export function edgeKey(e: EdgeData): EdgeId {
@@ -46,10 +50,17 @@ export function edgeKey(e: EdgeData): EdgeId {
 }
 
 // --- Positionnement ---------------------------------------------------------
+// CSPRNG plutôt que Math.random() : purement cosmétique ici (jitter de
+// positionnement des nœuds), mais évite le signalement générique de
+// SonarQube sur Math.random() (S2245, "PRNG non sécurisé").
+export function randomFloat(): number {
+  return crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32
+}
+
 // Jitter autour d'un point d'ancrage pour les nouveaux nœuds (évite l'empilement)
 export function jitterAround(x: number, y: number, radius = 120) {
-  const angle = Math.random() * 2 * Math.PI
-  const r = radius * (0.4 + 0.6 * Math.random())
+  const angle = randomFloat() * 2 * Math.PI
+  const r = radius * (0.4 + 0.6 * randomFloat())
   return { x: x + Math.cos(angle) * r, y: y + Math.sin(angle) * r }
 }
 
@@ -61,13 +72,13 @@ export const PORT_LABEL_ZOOM = 1.8
 // Tailles proportionnelles au trafic, en échelle log : les gros parleurs
 // ressortent sans écraser les hôtes discrets.
 export const NODE_SIZE_MIN = 7
-const NODE_SIZE_MAX = 18
+export const NODE_SIZE_MAX = 80
 export function nodeSizeFor(bytes: number) {
-  return Math.min(NODE_SIZE_MAX, NODE_SIZE_MIN + 1.1 * Math.log2(1 + bytes / 2000))
+  return Math.min(NODE_SIZE_MAX, NODE_SIZE_MIN + 2 * Math.log2(1 + bytes / 2000))
 }
 
-const EDGE_SIZE_MIN = 1.2
-const EDGE_SIZE_MAX = 7
+export const EDGE_SIZE_MIN = 1.2
+export const EDGE_SIZE_MAX = 7
 export function edgeSizeFor(bytes: number) {
   return Math.min(EDGE_SIZE_MAX, EDGE_SIZE_MIN + 0.55 * Math.log2(1 + bytes / 1500))
 }
@@ -111,16 +122,29 @@ export function nodeAttributes(node: Node) {
   // Plusieurs MAC unicast pour une même IP : anomalie (IP partagée, VRRP,
   // usurpation ARP…) signalée par une bordure d'alerte.
   const macConflict = macs.length > 1
+  // Identité contextualisée (#154) : le VLAN fait partie de la clé du nœud,
+  // il est affiché dans le libellé ; une IP présente sur plusieurs VLAN est
+  // signalée (bordure ambre), le conflit de MAC (rouge) garde priorité.
+  const vlanId: number | null = typeof node.vlan_id === "number" ? node.vlan_id : null
+  const duplicateIp = node.duplicate_ip === true
+  const vlanSuffix = vlanId !== null ? ` (VLAN ${vlanId})` : ""
+  const borderColor = macConflict
+    ? MAC_CONFLICT_BORDER_COLOR
+    : duplicateIp
+    ? DUPLICATE_IP_BORDER_COLOR
+    : darken(color, 0.25)
   return {
     name: node.name || node.id,
     mac: node.mac || "",
     macs,
     macConflict,
     ip: node.ip || "",
+    vlanId,
+    duplicateIp,
     rawLabel,
-    label: rawLabel || node.name || node.id,
+    label: (rawLabel || node.name || node.id) + vlanSuffix,
     color,
-    borderColor: macConflict ? MAC_CONFLICT_BORDER_COLOR : darken(color, 0.25),
+    borderColor,
     hoverColor: brighten(color, 0.18),
   }
 }
@@ -146,4 +170,38 @@ export function edgeAttributes(e: Edge) {
     color: colorForProtocol(e.label || ""),
     size: edgeSizeFor(totalBytes),
   }
+}
+
+// --- Libellé d'arête rendu (reducer Sigma) -----------------------------------
+interface EdgeLabelSource {
+  protocol?: string
+  ports?: number[]
+  has_dynamic_ports?: boolean
+  source_port?: number | string | null
+  destination_port?: number | string | null
+}
+
+/** Libellé d'arête affiché par le edgeReducer de NetworkGraphComponent.vue :
+ *  protocole, plus le détail des ports si affiché à ce niveau de zoom.
+ *  Extrait du reducer (complexité cognitive 18, hors du seuil Sonar de 15)
+ *  pour rester une fonction pure testable indépendamment. */
+export function edgeLabelFor(data: EdgeLabelSource, portLabelsShown: boolean): string {
+  const protocol = data.protocol ?? ""
+  if (!portLabelsShown) return protocol
+
+  const ports: number[] = Array.isArray(data.ports) ? data.ports : []
+  const hasDynamic = data.has_dynamic_ports === true
+  if (ports.length > 0) {
+    // Ports « service » de l'arête (les éphémères ne sont pas listés,
+    // le backend les résume par has_dynamic_ports → « … »).
+    return `${protocol} :${ports.join(",")}${hasDynamic ? ",…" : ""}`
+  }
+  if (hasDynamic) {
+    // Uniquement du trafic sur ports dynamiques : signalé sans liste.
+    return `${protocol} :…`
+  }
+  if (data.source_port != null || data.destination_port != null) {
+    return `${protocol} ${data.source_port ?? ""}→${data.destination_port ?? ""}`
+  }
+  return protocol
 }

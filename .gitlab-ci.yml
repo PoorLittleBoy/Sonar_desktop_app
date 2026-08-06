@@ -4,12 +4,7 @@ stages:
   - test
 
 build-ci-image:
-  stage: .pre
   #rules:
-  #  - if: $CI_COMMIT_REF_PROTECTED == "true"
-  image: 
-    name: ghcr.io/osscontainertools/kaniko:v1.28.1-debug
-    entrypoint: [""]
   before_script:  
     - cp "$ERDT_CA_CERT" /kaniko/ssl/certs/erdtcyber-CA.crt
     - mkdir -p /kaniko/.docker

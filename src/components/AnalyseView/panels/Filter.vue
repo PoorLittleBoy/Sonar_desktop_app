@@ -5,39 +5,48 @@
   utils/bpf.ts.
 -->
 <template>
-  <div class="filter-overlay" @click="$emit('update:visible', false)">
+  <div
+    class="filter-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Filtre BPF"
+    ref="panel"
+    tabindex="-1"
+    @click="$emit('update:visible', false)"
+    @keydown.esc="$emit('update:visible', false)"
+  >
     <div class="filter-panel" @click.stop>
 
       <!-- Header -->
       <div class="panel-header">
         <h2>Filtre BPF</h2>
-        <button class="close-btn" @click="$emit('update:visible', false)">✕</button>
+        <button type="button" class="close-btn" @click="$emit('update:visible', false)">✕</button>
       </div>
 
       <!-- Filtre actif -->
       <div class="active-filter-bar" v-if="captureStore.activeFilter">
         <span class="active-filter-label">Filtre actif</span>
         <code class="active-filter-expr">{{ captureStore.activeFilter }}</code>
-        <button class="btn ghost active-filter-clear" @click="resetAll">Supprimer</button>
+        <button type="button" class="btn ghost active-filter-clear" @click="resetAll">Supprimer</button>
       </div>
 
       <!-- Filtre en attente (appliqué au prochain démarrage) -->
       <div class="pending-filter-bar" v-if="captureStore.pendingFilter">
         <span class="pending-filter-label">Prochain démarrage</span>
         <code class="active-filter-expr">{{ captureStore.pendingFilter }}</code>
-        <button class="btn ghost active-filter-clear" @click="cancelPending">Annuler</button>
+        <button type="button" class="btn ghost active-filter-clear" @click="cancelPending">Annuler</button>
       </div>
 
       <!-- Presets rapides -->
       <section class="card">
         <h3>Presets rapides</h3>
         <div class="chips">
-          <button class="chip" @click="preset('ipv4')">IPv4 only</button>
-          <button class="chip" @click="preset('web')">Web (80/443)</button>
-          <button class="chip" @click="preset('dns')">DNS (53)</button>
-          <button class="chip" @click="preset('ntp')">NTP (123)</button>
-          <button class="chip" @click="preset('syn')">TCP SYN only</button>
-          <button class="chip" @click="preset('no-arp-ipv6')">Tout sauf ARP/IPv6</button>
+          <button type="button" class="chip" @click="preset('ipv4')">IPv4 only</button>
+          <button type="button" class="chip" @click="preset('web')">Web (80/443)</button>
+          <button type="button" class="chip" @click="preset('dns')">DNS (53)</button>
+          <button type="button" class="chip" @click="preset('ntp')">NTP (123)</button>
+          <button type="button" class="chip" @click="preset('syn')">TCP SYN only</button>
+          <button type="button" class="chip" @click="preset('no-arp-ipv6')">Tout sauf ARP/IPv6</button>
         </div>
       </section>
 
@@ -80,24 +89,24 @@
         <div class="card">
           <h3>Adresses IP</h3>
           <div class="field">
-            <label>Inclure hôte</label>
-            <input v-model="ip.includeHost" placeholder="ex: 192.168.1.42" />
+            <label for="filter-ip-include-host">Inclure hôte</label>
+            <input id="filter-ip-include-host" v-model="ip.includeHost" placeholder="ex: 192.168.1.42" />
           </div>
           <div class="field">
-            <label>Exclure hôte</label>
-            <input v-model="ip.excludeHost" placeholder="ex: 10.0.0.1" />
+            <label for="filter-ip-exclude-host">Exclure hôte</label>
+            <input id="filter-ip-exclude-host" v-model="ip.excludeHost" placeholder="ex: 10.0.0.1" />
           </div>
           <div class="field">
-            <label>Inclure réseau</label>
-            <input v-model="ip.includeNet" placeholder="ex: 10.0.0.0/8" />
+            <label for="filter-ip-include-net">Inclure réseau</label>
+            <input id="filter-ip-include-net" v-model="ip.includeNet" placeholder="ex: 10.0.0.0/8" />
           </div>
           <div class="field">
-            <label>Exclure réseau</label>
-            <input v-model="ip.excludeNet" placeholder="ex: 192.168.0.0/16" />
+            <label for="filter-ip-exclude-net">Exclure réseau</label>
+            <input id="filter-ip-exclude-net" v-model="ip.excludeNet" placeholder="ex: 192.168.0.0/16" />
           </div>
           <div class="field">
-            <label>Direction</label>
-            <select v-model="ip.direction">
+            <label for="filter-ip-direction">Direction</label>
+            <select id="filter-ip-direction" v-model="ip.direction">
               <option value="any">src ou dst</option>
               <option value="src">src</option>
               <option value="dst">dst</option>
@@ -111,20 +120,20 @@
         <div class="card">
           <h3>Ports</h3>
           <div class="field">
-            <label>Inclure port(s)</label>
-            <input v-model="ports.include" placeholder="ex: 80,443,22" />
+            <label for="filter-port-include">Inclure port(s)</label>
+            <input id="filter-port-include" v-model="ports.include" placeholder="ex: 80,443,22" />
           </div>
           <div class="field">
-            <label>Exclure port(s)</label>
-            <input v-model="ports.exclude" placeholder="ex: 25,21" />
+            <label for="filter-port-exclude">Exclure port(s)</label>
+            <input id="filter-port-exclude" v-model="ports.exclude" placeholder="ex: 25,21" />
           </div>
           <div class="field">
-            <label>Plage</label>
-            <input v-model="ports.range" placeholder="ex: 10000-20000" />
+            <label for="filter-port-range">Plage</label>
+            <input id="filter-port-range" v-model="ports.range" placeholder="ex: 10000-20000" />
           </div>
           <div class="field">
-            <label>Direction</label>
-            <select v-model="ports.direction">
+            <label for="filter-port-direction">Direction</label>
+            <select id="filter-port-direction" v-model="ports.direction">
               <option value="any">src ou dst</option>
               <option value="src">src</option>
               <option value="dst">dst</option>
@@ -140,7 +149,7 @@
       <!-- BPF brut -->
       <section class="card">
         <h3>Expression BPF brute</h3>
-        <input class="raw-input" v-model="advancedRaw" placeholder="ex: tcp[13] & 0x02 != 0 and tcp[13] & 0x10 = 0" />
+        <input class="raw-input" v-model="advancedRaw" placeholder="ex: tcp[13] & 0x02 != 0 and tcp[13] & 0x10 = 0" aria-label="Expression BPF brute" />
         <p class="hint">Concaténé à la fin du filtre généré avec <code>and</code>.</p>
       </section>
 
@@ -155,15 +164,16 @@
           :value="previewText"
           @input="onPreviewInput"
           placeholder="Le filtre BPF généré apparaît ici…"
+          aria-label="Aperçu du filtre BPF généré"
           rows="3"
         />
         <div class="errors" v-if="globalErrors.length">
           <span v-for="e in globalErrors" :key="e">• {{ e }}</span>
         </div>
         <div class="actions">
-          <button class="btn primary" @click="apply" :disabled="!canApply">Appliquer</button>
-          <button class="btn ghost" @click="resetAll">Réinitialiser</button>
-          <button class="btn ghost sync" v-if="isManualPreview" @click="syncPreview">↺ Sync auto</button>
+          <button type="button" class="btn primary" @click="apply" :disabled="!canApply">Appliquer</button>
+          <button type="button" class="btn ghost" @click="resetAll">Réinitialiser</button>
+          <button type="button" class="btn ghost sync" v-if="isManualPreview" @click="syncPreview">↺ Sync auto</button>
         </div>
       </section>
 
@@ -172,8 +182,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { error } from '@tauri-apps/plugin-log';
 import { useCaptureStore } from '../../../store/capture';
 import {
   BPF_PRESETS,
@@ -185,6 +196,9 @@ import {
 
 const emit = defineEmits<{ 'update:visible': [value: boolean] }>();
 const captureStore = useCaptureStore();
+const panel = ref<HTMLDivElement | null>(null);
+
+onMounted(() => { panel.value?.focus(); });
 
 const initial = emptyBpfFormState();
 const opt = ref(initial.opt);
@@ -237,7 +251,7 @@ async function apply() {
     }
     emit('update:visible', false);
   } catch (e) {
-    console.error('set_filter failed:', e);
+    error(`set_filter failed: ${e}`);
   }
 }
 
@@ -259,7 +273,7 @@ async function resetAll() {
     captureStore.setActiveFilter('');
     captureStore.setPendingFilter('');
   } catch (e) {
-    console.error('clear filter failed:', e);
+    error(`clear filter failed: ${e}`);
   }
 }
 
@@ -268,7 +282,7 @@ async function cancelPending() {
     await invoke('set_filter', { filter: captureStore.activeFilter });
     captureStore.setPendingFilter('');
   } catch (e) {
-    console.error('cancel pending failed:', e);
+    error(`cancel pending failed: ${e}`);
   }
 }
 
@@ -474,7 +488,9 @@ function preset(name: string) {
 }
 .row code {
   font-size: 11px;
-  color: #6080c0;
+  /* #6080c0 était sous le seuil WCAG AA (4.34:1 sur #1a1a2e) ; même teinte,
+     légèrement éclaircie pour passer 4.5:1. */
+  color: #6483c1;
   background: #1a1a2e;
   padding: 1px 4px;
   border-radius: 3px;
@@ -614,7 +630,9 @@ function preset(name: string) {
 }
 .chip {
   background: #1e1e30;
-  color: #8080b0;
+  /* #8080b0 était sous le seuil WCAG AA (4.39:1 sur #1e1e30) ; même teinte,
+     légèrement éclaircie pour passer 4.5:1. */
+  color: #8383b2;
   border: 1px solid #2d2d50;
   border-radius: 999px;
   padding: 5px 13px;

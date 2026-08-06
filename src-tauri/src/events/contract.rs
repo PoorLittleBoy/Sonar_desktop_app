@@ -49,6 +49,12 @@ pub struct NodeContract {
     pub mac: String,
     pub macs: Vec<String>,
     pub ip: String,
+    /// VLAN 802.1Q du nœud (`null` hors trame taguée) : fait partie de la
+    /// clé d'identité — la même IP sur deux VLAN est deux nœuds (#154).
+    pub vlan_id: Option<u16>,
+    /// Vrai quand la même IP est portée par plusieurs nœuds (VLAN
+    /// différents) : anomalie à signaler visuellement (#154).
+    pub duplicate_ip: bool,
     pub label: Option<String>,
 }
 
@@ -61,6 +67,8 @@ impl From<&Node> for NodeContract {
             mac: node.mac.clone(),
             macs: node.macs.clone(),
             ip: node.ip.clone(),
+            vlan_id: node.vlan_id,
+            duplicate_ip: node.duplicate_ip,
             label: node.label.clone(),
         }
     }
@@ -834,18 +842,18 @@ mod tests {
         assert_same_json(&real, &to_contract(&real), "importProgress");
     }
 
-    // `Node::new`/`Edge::new` tirent leur `id` d'un compteur atomique global
-    // partagé par tout le binaire de test (#142) : sa valeur dépend de quels
-    // autres tests ont construit un `Node`/`Edge` avant, dans un ordre non
-    // garanti (tests parallèles). On écrase `id` par une valeur fixe après
-    // construction pour que `export_ipc_fixtures` produise un JSON stable
-    // d'une exécution à l'autre, indépendamment du reste de la suite.
+    // Depuis sonar-flows-core 0.5, `Node::new`/`Edge::new` dérivent leur
+    // `id` de la clé d'identité passée en premier argument (hash stable,
+    // #154). On écrase quand même `id` par une valeur courte et lisible :
+    // les fixtures JSON de `export_ipc_fixtures` restent auto-descriptives.
     fn sample_node() -> Node {
         let mut node = Node::new(
+            "192.168.1.10",
             "192.168.1.10".to_string(),
             "aa:bb:cc:dd:ee:ff".to_string(),
             "#ff0000",
             "192.168.1.10".to_string(),
+            None,
             Some("Serveur".to_string()),
         );
         node.id = "node-1".to_string();
@@ -853,7 +861,11 @@ mod tests {
     }
 
     fn sample_edge() -> Edge {
-        let mut edge = Edge::new("node-1".to_string(), "node-2".to_string());
+        let mut edge = Edge::new(
+            "node-1:node-2:TCP",
+            "node-1".to_string(),
+            "node-2".to_string(),
+        );
         edge.id = "edge-1".to_string();
         edge.label = "TCP".to_string();
         edge.source_port = Some(443);
@@ -871,15 +883,21 @@ mod tests {
     /// laissant `label: string | null` sans fixture TS exerçant le cas
     /// `null` (#142) — retirer le `| null` du type généré resterait alors
     /// invisible au typecheck.
+    /// Ce nœud exerce aussi les cas `vlan_id` non nul et `duplicate_ip`
+    /// vrai (#154) : `sample_node()` les laisse à `null`/`false`, une
+    /// régression du type généré resterait sinon invisible au typecheck.
     fn sample_node_without_label() -> Node {
         let mut node = Node::new(
+            "vlan42:192.168.1.20",
             "192.168.1.20".to_string(),
             "aa:bb:cc:dd:ee:00".to_string(),
             "#00ff00",
             "192.168.1.20".to_string(),
+            Some(42),
             None,
         );
         node.id = "node-2".to_string();
+        node.duplicate_ip = true;
         node
     }
 
@@ -887,7 +905,11 @@ mod tests {
     /// couple, laissant `sourcePort`/`destinationPort: number | null` sans
     /// fixture TS exerçant le cas `null` (#142).
     fn sample_edge_without_ports() -> Edge {
-        let mut edge = Edge::new("node-1".to_string(), "node-2".to_string());
+        let mut edge = Edge::new(
+            "node-1:node-2:IPv6",
+            "node-1".to_string(),
+            "node-2".to_string(),
+        );
         edge.id = "edge-2".to_string();
         edge.label = "IPv6".to_string();
         edge.bidir = false;
@@ -949,7 +971,11 @@ mod tests {
         let mut edges = HashMap::new();
         edges.insert(edge.id.clone(), edge);
 
-        let real_graph = crate::state::graph::GraphData { nodes, edges };
+        // `GraphData` n'est plus constructible par littéral (index interne
+        // privé depuis sonar-flows-core 0.5) : on remplit ses champs publics.
+        let mut real_graph = crate::state::graph::GraphData::new();
+        real_graph.nodes = nodes;
+        real_graph.edges = edges;
         let real = crate::events::CaptureEvent::GraphSnapshot {
             graph_data: &real_graph,
         };
@@ -1053,6 +1079,36 @@ mod tests {
             ip_destination_type: None,
             protocol: "ARP".to_string(),
         }
+    }
+
+    /// Retourne la couleur réellement attribuée par `sonar-flows-core` à un
+    /// nœud du graphe. Le paquet passe volontairement par `GraphData` : la
+    /// palette exportée vers TypeScript ci-dessous ne recopie donc aucune
+    /// constante Rust et dérive du même chemin que le rendu en production.
+    fn rendered_graph_node_color(ip_type: Option<IpType>) -> String {
+        let internet = ip_type.map(|kind| {
+            internet_with(
+                Ipv4Addr::new(192, 0, 2, 1),
+                kind.clone(),
+                Ipv4Addr::new(192, 0, 2, 2),
+                kind,
+            )
+        });
+        let packet = flow_with(ethernet_link(None), internet, None, None, None, None);
+        let mut graph = crate::state::graph::GraphData::default();
+        graph.add_packet_flow(&packet, None, None, 1, 60, &[]);
+
+        let colors: std::collections::BTreeSet<_> = graph
+            .nodes
+            .values()
+            .map(|node| node.color.clone())
+            .collect();
+        assert_eq!(
+            colors.len(),
+            1,
+            "une catégorie doit produire une couleur unique"
+        );
+        colors.into_iter().next().expect("au moins un nœud produit")
     }
 
     /// Groupe transport *présent* mais ports individuellement absents (même
@@ -1410,6 +1466,62 @@ mod tests {
         }
     }
 
+    /// Génère la palette des catégories de nœuds à partir du graphe Rust
+    /// réel. La légende Vue importe directement ce fichier ; la gate CI
+    /// `export_ipc` le régénère puis vérifie le worktree, ce qui empêche une
+    /// modification des couleurs backend de dériver silencieusement du
+    /// frontend.
+    #[test]
+    fn export_ipc_graph_node_categories() {
+        #[derive(Serialize)]
+        struct Category {
+            kind: &'static str,
+            color: String,
+        }
+
+        let categories = [
+            ("Private", Some(IpType::Private)),
+            ("Public", Some(IpType::Public)),
+            ("Multicast", Some(IpType::Multicast)),
+            ("Loopback", Some(IpType::Loopback)),
+            ("Apipa", Some(IpType::Apipa)),
+            ("LinkLocal", Some(IpType::LinkLocal)),
+            ("Ula", Some(IpType::Ula)),
+            ("Documentation", Some(IpType::Documentation)),
+            ("Layer2", None),
+        ]
+        .into_iter()
+        .map(|(kind, ip_type)| Category {
+            kind,
+            color: rendered_graph_node_color(ip_type),
+        })
+        .collect::<Vec<_>>();
+
+        // `Unknown` suit le repli L2 dans GraphData : il ne constitue pas
+        // une dixième catégorie visuelle.
+        assert_eq!(
+            rendered_graph_node_color(Some(IpType::Unknown)),
+            rendered_graph_node_color(None)
+        );
+
+        let json = serde_json::to_string_pretty(&categories).expect("sérialisation palette");
+        let out = format!(
+            "// Généré par `cargo test export_ipc_graph_node_categories` — NE PAS ÉDITER À LA MAIN.\n\
+             // Couleurs observées en faisant passer chaque catégorie par GraphData.\n\
+             import type {{ IpType }} from \"./IpType\";\n\n\
+             export type GraphNodeCategory = Exclude<IpType, \"Unknown\"> | \"Layer2\";\n\n\
+             export const GRAPH_NODE_CATEGORIES = ({json}) as const satisfies ReadonlyArray<{{\n\
+               kind: GraphNodeCategory;\n\
+               color: string;\n\
+             }}>;\n"
+        );
+
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/types/generated");
+        std::fs::create_dir_all(&dir).expect("création du dossier généré");
+        std::fs::write(dir.join("graphNodeCategories.ts"), out)
+            .expect("écriture de la palette du graphe");
+    }
+
     /// Écrit le JSON **réellement produit par `CaptureEvent`** (jamais par
     /// son miroir) dans `src/types/generated/captureEventFixtures.ts`, avec
     /// `satisfies CaptureEvent` (#142) : contrairement à une annotation
@@ -1580,7 +1692,9 @@ mod tests {
         nodes.insert(node.id.clone(), node);
         let mut edges = HashMap::new();
         edges.insert(edge.id.clone(), edge);
-        let graph_data = crate::state::graph::GraphData { nodes, edges };
+        let mut graph_data = crate::state::graph::GraphData::new();
+        graph_data.nodes = nodes;
+        graph_data.edges = edges;
         fixture!(
             graphSnapshotFixture,
             crate::events::CaptureEvent::GraphSnapshot {

@@ -5,39 +5,42 @@
 -->
 <template>
   <div class="top-bar">
-    <button class="image-btn" @click="start" title="Démarrer (ctrl+p)" :disabled="isRunning || activePanel !== null">
+    <button type="button" class="image-btn" @click="start" title="Démarrer (ctrl+p)" aria-label="Démarrer la capture" :disabled="isRunning || activePanel !== null">
       <img src="../../../src-tauri/icons/StoreLogo.png" alt="Flux" class="icon-img" />
     </button>
 
-    <button class="image-btn" @click="stop" title="Arrêter (ctrl+shift+p)" :disabled="!isRunning">🛑</button>
-    <button class="image-btn" @click="reset" :disabled="activePanel !== null" title="Réinitialiser (ctrl+shift+r)">🔄</button>
-    <button class="image-btn"  title="Config (ctrl+,)" :disabled="isRunning" @click="handleConfigClick">
-      <img src="../../assets/mdi--gear.svg" alt="Flux" class="icon-img" />
+    <button type="button" class="image-btn" @click="stop" title="Arrêter (ctrl+shift+p)" aria-label="Arrêter la capture" :disabled="!isRunning">🛑</button>
+    <button type="button" class="image-btn" @click="reset" :disabled="activePanel !== null" title="Réinitialiser (ctrl+shift+r)" aria-label="Réinitialiser">🔄</button>
+    <button type="button" class="image-btn" title="Config (ctrl+,)" aria-label="Configuration" :disabled="isRunning" @click="handleConfigClick">
+      <img src="../../assets/mdi--gear.svg" alt="Configuration" class="icon-img" />
     </button>
 
-    <button class="image-btn" @click="triggerSave" title="Sauvegarder (ctrl+s)">💾</button>
-    <button class="image-btn" @click="SaveLabels" title="Exporter les labels">🏷️</button>
-    <button class="image-btn" @click="handleLabelsClick" :disabled="isRunning" title="Gérer les labels">🗂️</button>
+    <button type="button" class="image-btn" @click="triggerSave" title="Sauvegarder (ctrl+s)" aria-label="Sauvegarder la matrice de flux">💾</button>
+    <button type="button" class="image-btn" @click="saveProject" title="Enregistrer le projet (.sonar)" aria-label="Enregistrer le projet">🗃️</button>
+    <button type="button" class="image-btn" @click="openProject" :disabled="isRunning || captureStore.hasData" title="Ouvrir un projet (.sonar)" aria-label="Ouvrir un projet">📂</button>
+    <button type="button" class="image-btn" @click="SaveLabels" title="Exporter les labels" aria-label="Exporter les labels">🏷️</button>
+    <button type="button" class="image-btn" @click="handleLabelsClick" :disabled="isRunning" title="Gérer les labels" aria-label="Gérer les labels">🗂️</button>
 
-    <button class="image-btn" @click="displayPcapOpener" :disabled="isRunning || captureStore.hasData" title="Ouvrir un fichier Pcap ou une matrice de flux (ctrl+o)">📄</button>
-    <button class="image-btn" @click="displayCsvOpener" :disabled="isRunning" title="Importer un fichier de label"><img src="../../assets/images/import_csv.png" alt="Importer un fichier de label" /></button>
-    
-    <button class="image-btn" @click="quit" title="Quitter (ctrl+q)">❎</button>
-    <button class="image-btn" @click="export_logs" title="Logs (ctrl+l)">📒</button>
-    <button class="image-btn" @click="handleFilterClick" :disabled="isRunning" title="Filtrer (ctrl+f)">🔍</button>
+    <button type="button" class="image-btn" @click="displayPcapOpener" :disabled="isRunning || captureStore.hasData" title="Ouvrir un fichier Pcap ou une matrice de flux (ctrl+o)" aria-label="Ouvrir un fichier Pcap ou une matrice de flux">📄</button>
+    <button type="button" class="image-btn" @click="displayCsvOpener" :disabled="isRunning" title="Importer un fichier de label"><img src="../../assets/images/import_csv.png" alt="Importer un fichier de label" /></button>
+
+    <button type="button" class="image-btn" @click="quit" title="Quitter (ctrl+q)" aria-label="Quitter">❎</button>
+    <button type="button" class="image-btn" @click="export_logs" title="Logs (ctrl+l)" aria-label="Exporter les logs">📒</button>
+    <button type="button" class="image-btn" @click="handleFilterClick" :disabled="isRunning" title="Filtrer (ctrl+f)" aria-label="Filtrer">🔍</button>
   </div>
 </template>
 
 <script lang="ts">
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { info, error } from '@tauri-apps/plugin-log';
-import { save } from '@tauri-apps/plugin-dialog';
+import { ask, open, save } from '@tauri-apps/plugin-dialog';
 
 import { displayCaptureError } from '../../errors/capture'; // Gestion des erreurs propre
 import { getCurrentDate } from '../../utils/time';
 import { useCaptureStore } from '../../store/capture';
 import { CaptureEvent } from '../../types/capture';
 import { requestAppExit } from '../../utils/appExit';
+import { getLastProjectDir, recordRecentProject } from '../../utils/recentProjects';
 
 type Panel = 'config' | 'pcap' | 'csv' | 'filter' | 'labels';
 
@@ -64,9 +67,6 @@ export default {
 },
 
   computed: {
-    buttonText(): string {
-      return this.captureStore.showMatrice ? 'Graphique' : 'Matrice';
-    },
     captureStore() {
       return useCaptureStore();
     },
@@ -77,7 +77,6 @@ export default {
   },
   data() {
     return {
-      showMatrice: true, // Toggle state (true for Matrice, false for NetworkGraphComponent)
       localHandler: null as ((e: KeyboardEvent) => void) | null,
       activePanel: null as Panel | null,
     };
@@ -135,19 +134,24 @@ export default {
     async export_logs() {
       info("export logs")
       await this.withImportLock(async () => {
-        const response = await save({
-          filters: [{ name: '.log', extensions: ['log'] }],
-          title: 'Sauvegarder les logs',
-          defaultPath: 'sonar.log'
-        });
+        try {
+          const response = await save({
+            filters: [{ name: '.zip', extensions: ['zip'] }],
+            title: 'Sauvegarder les logs',
+            defaultPath: 'sonar-logs.zip'
+          });
 
-        if (!response) {
-          info("Aucun chemin de fichier sélectionné");
-          throw new Error("Sauvegarde annulée ou chemin non sélectionné");
+          if (!response) {
+            info("Aucun chemin de fichier sélectionné");
+            return;
+          }
+          // Attendez que l'invocation d'API pour sauvegarder soit terminée
+          const saveResponse = await invoke('export_logs', { destination: response });
+          info(`Sauvegarde terminée: ${JSON.stringify(saveResponse)}`);
+        } catch (err) {
+          error(`Erreur export logs: ${err}`);
+          await displayCaptureError(err);
         }
-        // Attendez que l'invocation d'API pour sauvegarder soit terminée
-        const saveResponse = await invoke('export_logs', { destination: response });
-        info(`Sauvegarde terminée: ${JSON.stringify(saveResponse)}`);
       });
     },
 
@@ -197,7 +201,66 @@ export default {
     async triggerSave() {
       info("trigger save")
       this.SaveAsCsv();
-      
+
+    },
+    async saveProject() {
+      info("Enregistrement du projet");
+      await this.withImportLock(async () => {
+        try {
+          const lastDir = await getLastProjectDir();
+          const fileName = getCurrentDate() + '_projet.sonar';
+          const response = await save({
+            filters: [{ name: 'Projet SONAR', extensions: ['sonar'] }],
+            title: 'Enregistrer le projet',
+            defaultPath: lastDir ? `${lastDir}/${fileName}` : fileName
+          });
+
+          if (!response) {
+            info("Aucun chemin sélectionné");
+            return;
+          }
+          await invoke('save_project', { path: response });
+          await recordRecentProject(response);
+          info("Projet enregistré");
+        } catch (err) {
+          error(`Erreur enregistrement projet: ${err}`);
+          await displayCaptureError(err);
+        }
+      });
+    },
+    async openProject() {
+      info("Ouverture d'un projet");
+      await this.withImportLock(async () => {
+        try {
+          const response = await open({
+            multiple: false,
+            filters: [{ name: 'Projet SONAR', extensions: ['sonar'] }],
+            title: 'Ouvrir un projet',
+            defaultPath: await getLastProjectDir()
+          });
+
+          if (!response) {
+            info("Aucun projet sélectionné");
+            return;
+          }
+          // Même discipline que l'import de matrice : un Channel Tauri est à
+          // usage unique, on en crée un neuf par invoke ; pendant une capture
+          // live le backend passe par le channel de la capture.
+          const store = useCaptureStore();
+          const onEvent = new Channel<CaptureEvent>();
+          if (!store.isRunning) {
+            store.setChannel(onEvent);
+          }
+          store.clearImportProgress();
+          await invoke('open_project', { path: response, onEvent });
+          await recordRecentProject(response);
+          await store.refreshHasData();
+          info("Projet ouvert");
+        } catch (err) {
+          error(`Erreur ouverture projet: ${err}`);
+          await displayCaptureError(err);
+        }
+      });
     },
     async reset() {
       info("reset")
@@ -208,6 +271,19 @@ export default {
       }
 
       try {
+        // Confirmation seulement si du travail non enregistré serait perdu
+        // (#159). En cas de doute (IPC en échec), on demande.
+        const dirty = await invoke<boolean>('is_session_dirty').catch(() => true);
+        if (dirty) {
+          const confirmed = await ask(
+            'La réinitialisation effacera le relevé non enregistré.\nContinuer ?',
+            { title: 'SONAR', kind: 'warning' },
+          );
+          if (!confirmed) {
+            info('reset annulé par l\'utilisateur');
+            return;
+          }
+        }
         await invoke('reset_capture');
         await useCaptureStore().refreshHasData();
         this.$bus.emit('reset');
@@ -298,18 +374,10 @@ export default {
         })
         .finally(() =>useCaptureStore().refreshHasData());
     },
-    toggleView() {
-      info('Vue basculée');
-    },
-
     async quit() {
       info('Fermeture demandée');
       await requestAppExit();
     },
-
-    toggleConfig() {
-      info('Ouverture panneau config'); 
-    }
   }
 }
 </script>

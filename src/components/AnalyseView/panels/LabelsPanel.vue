@@ -14,7 +14,7 @@
     @keydown.esc="close"
   >
     <div class="center-container" ref="panel" tabindex="-1">
-      <button class="btn image-btn cross" @click.prevent="close" title="Fermer (Échap)">❌</button>
+      <button type="button" class="btn image-btn cross" @click.prevent="close" title="Fermer (Échap)">❌</button>
 
       <h1 class="dialog-title">Gestion des labels</h1>
       <p class="text subtitle">
@@ -32,15 +32,15 @@
           placeholder="Rechercher (MAC, IP, label)…"
           aria-label="Rechercher un label"
         />
-        <button
+        <button type="button"
           v-if="conflicts.length > 0"
           class="btn btn-conflicts"
           @click="showArbitration = true"
         >
           ⚖️ Arbitrer {{ conflicts.length }} conflit(s)
         </button>
-        <button class="btn" @click="importFile" :disabled="busy">📥 Importer</button>
-        <button class="btn" @click="exportFile" :disabled="busy || rows.length === 0">💾 Exporter</button>
+        <button type="button" class="btn" @click="importFile" :disabled="busy">📥 Importer</button>
+        <button type="button" class="btn" @click="exportFile" :disabled="busy || rows.length === 0">💾 Exporter</button>
       </div>
 
       <!-- Ajout d'une ligne -->
@@ -76,8 +76,8 @@
               <input v-model="edit.ip" class="input mono" aria-label="IP" @keydown.enter.prevent="saveEdit(row)" />
               <input v-model="edit.label" class="input" aria-label="Label" @keydown.enter.prevent="saveEdit(row)" />
               <span class="col-actions">
-                <button class="btn image-btn" @click="saveEdit(row)" :disabled="busy" title="Enregistrer (Entrée)">✅</button>
-                <button class="btn image-btn" @click="editingKey = null" title="Annuler">↩️</button>
+                <button type="button" class="btn image-btn" @click="saveEdit(row)" :disabled="busy" title="Enregistrer (Entrée)">✅</button>
+                <button type="button" class="btn image-btn" @click="editingKey = null" title="Annuler">↩️</button>
               </span>
             </template>
             <template v-else>
@@ -90,8 +90,8 @@
               <span class="text mono">{{ row.ip || "-" }}</span>
               <span class="text">{{ row.label || "-" }}</span>
               <span class="col-actions">
-                <button class="btn image-btn" @click="startEdit(row)" title="Éditer">✏️</button>
-                <button class="btn image-btn" @click="deleteRow(row)" :disabled="busy" title="Supprimer">🗑️</button>
+                <button type="button" class="btn image-btn" @click="startEdit(row)" title="Éditer">✏️</button>
+                <button type="button" class="btn image-btn" @click="deleteRow(row)" :disabled="busy" title="Supprimer">🗑️</button>
               </span>
             </template>
           </div>
@@ -111,7 +111,7 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { Channel, invoke } from '@tauri-apps/api/core';
-import { info, error } from '@tauri-apps/plugin-log';
+import { info, warn, error } from '@tauri-apps/plugin-log';
 import { ask, open, save } from '@tauri-apps/plugin-dialog';
 
 import ArbitrationDialog from './ArbitrationDialog.vue';
@@ -252,7 +252,7 @@ export default defineComponent({
         const onEvent = new Channel<CaptureEvent>();
         onEvent.onmessage = (msg) => {
           if (msg.event === 'started' && msg.data.protocolVersion !== EXPECTED_PROTOCOL_VERSION) {
-            console.warn(
+            warn(
               `[LabelsPanel] version du contrat IPC inattendue : reçu ${msg.data.protocolVersion}, attendu ${EXPECTED_PROTOCOL_VERSION}`
             );
           }

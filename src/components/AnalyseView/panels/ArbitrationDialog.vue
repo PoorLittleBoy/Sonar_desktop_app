@@ -7,7 +7,7 @@
 <template>
   <div class="container">
     <div class="center-container">
-      <button class="btn image-btn cross" @click.prevent="$emit('close')" :disabled="resolving">❌</button>
+      <button type="button" class="btn image-btn cross" @click.prevent="$emit('close')" :disabled="resolving">❌</button>
 
       <h1 class="dialog-title">Arbitrage des conflits de labels</h1>
       <p class="text subtitle">
@@ -35,8 +35,8 @@
       </div>
 
       <div class="actions">
-        <button class="btn btn-clear" @click="$emit('close')" :disabled="resolving">Fermer</button>
-        <button class="btn btn-open" @click="applyAll" :disabled="resolving">
+        <button type="button" class="btn btn-clear" @click="$emit('close')" :disabled="resolving">Fermer</button>
+        <button type="button" class="btn btn-open" @click="applyAll" :disabled="resolving">
           {{ resolving ? 'Application…' : 'Appliquer' }}
         </button>
       </div>
@@ -48,6 +48,7 @@
 import { defineComponent, PropType } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { info, error } from '@tauri-apps/plugin-log';
+import { displayCaptureError } from '../../../errors/capture';
 import { LabelConflictReport } from '../../../types/labels';
 
 type Candidate = { label: string; lines: number[] };
@@ -96,6 +97,7 @@ export default defineComponent({
         this.$emit('resolved');
       } catch (err) {
         error(`Erreur arbitrage: ${err}`);
+        await displayCaptureError(err);
       } finally {
         this.resolving = false;
       }
