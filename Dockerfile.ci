@@ -1,7 +1,7 @@
 ARG RUST_IMAGE_DIGEST
 FROM rust@${RUST_IMAGE_DIGEST}
 
-ARG LINUX_APT_PACKAGES
+ARG GITLAB_APT_PACKAGES
 ARG DEBIAN_SNAPSHOT_BASE_URL
 ARG APT_SNAPSHOT_TIMESTAMP
 ARG DENO_VERSION
@@ -10,6 +10,6 @@ RUN set -eux; \
     codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"; \
     echo "deb [check-valid-until=no] ${DEBIAN_SNAPSHOT_BASE_URL}/${APT_SNAPSHOT_TIMESTAMP}/ ${codename} main" > /etc/apt/sources.list; \
     apt-get -o Acquire::Check-Valid-Until=false update; \
-    apt-get install -y --no-install-recommends ${LINUX_APT_PACKAGES}; \
+    apt-get install -y --no-install-recommends ${GITLAB_APT_PACKAGES}; \
     npm install -g deno@${DENO_VERSION} \
     rm -rf /var/lib/apt/lists/*
