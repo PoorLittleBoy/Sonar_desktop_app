@@ -59,16 +59,19 @@ eslint:
 clippy:
   stage: lint
   image: gitlab.erdtcyber.com:5050/erdt-cyber/sonar:rust-clippy
+  variables:
+    CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
   cache:
     key:
       files:
-        - Cargo.lock
+        - src-tauri/Cargo.lock
     paths:
       - .cargo/registry
-      - target/
+      - .cargo/git
+      - src-tauri/target/
   script:
-      - cd ./src-tauri
-      - cargo clippy --all-targets --all-features
+    - cd ./src-tauri
+    - cargo clippy --all-targets --all-features -- -D warnings
 
 build:
   stage: build
