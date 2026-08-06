@@ -4,7 +4,10 @@ stages:
   - test
 
 build-ci-image:
-  #rules:
+  stage: .pre
+  image:
+    name: ghcr.io/osscontainertools/kaniko:v1.28.1-debug
+    entrypoint: [""]
   before_script:  
     - cp "$ERDT_CA_CERT" /kaniko/ssl/certs/erdtcyber-CA.crt
     - mkdir -p /kaniko/.docker
