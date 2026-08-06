@@ -58,6 +58,8 @@ eslint:
 
 clippy:
   stage: lint
+  tags:
+    - rust-heavy
   image: gitlab.erdtcyber.com:5050/erdt-cyber/sonar:rust-clippy
   variables:
     CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
@@ -67,7 +69,6 @@ clippy:
         - src-tauri/Cargo.lock
     paths:
       - .cargo/registry
-      - .cargo/git
       - src-tauri/target/
   script:
     - cd ./src-tauri
@@ -75,6 +76,8 @@ clippy:
 
 build:
   stage: build
+  tags:
+    - rust-heavy
   image: "${CI_BASE_IMAGE}"
   variables:
     CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
