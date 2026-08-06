@@ -43,7 +43,7 @@ build-ci-image:
 
 eslint:
   stage: lint
-  image: node:24-alpine
+  image: node:24.15.0-alpine
   cache:
     key:
       files:
