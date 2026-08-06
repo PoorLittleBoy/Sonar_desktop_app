@@ -13,6 +13,7 @@ export default tseslint.config(
       'sbom/**',
       'coverage/**',
       'src/tests/**',
+      'vendor/**',
     ],
   },
   eslint.configs.recommended,
