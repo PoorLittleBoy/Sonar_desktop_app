@@ -76,11 +76,14 @@ clippy:
 build:
   stage: build
   image: "${CI_BASE_IMAGE}"
+  variables:
+    CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+    DENO_DIR: "$CI_PROJECT_DIR/.deno_cache"
   cache:
     - key: { files: [deno.lock] }
       paths: [.deno_cache/]
     - key: { files: [Cargo.lock] }
-      paths: [.cargo/registry/, target/]
+      paths: [.cargo/registry/, src-tauri/target/]
   script:
     - deno install
-    - cargo tauri build
+    - deno task tauri build
