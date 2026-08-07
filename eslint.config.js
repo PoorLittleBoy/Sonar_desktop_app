@@ -29,7 +29,7 @@ export default tseslint.config(
       parserOptions: {
         parser: tseslint.parser,
         projectService: {
-          allowDefaultProject: ['security/repro-env.ts'],
+          allowDefaultProject: ['security/repro-env.ts', "script/graph/page/main.ts"],
         },
         extraFileExtensions: ['.vue'],
       },
@@ -48,11 +48,12 @@ export default tseslint.config(
   },
   {
     files: ['**/*.js'],
-    languageOptions: {
-      globals: {
-        ...globals.node,
-        Deno: 'readonly',
+    files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
+      languageOptions: {
+        globals: {
+          ...globals.node,
+          Deno: 'readonly',
+        },
       },
-    },
   },
 );
