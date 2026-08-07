@@ -92,7 +92,7 @@ build:
     - deno task tauri build
     - export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
     - ./script/package-deb-repro.sh \
-      src-tauri/target/release/bundle/deb/sonar_*.deb \
+      src-tauri/target/release/bundle/deb/*.deb \
       src-tauri/target/release/bundle/deb/sonar-repro.deb
     - sha256sum src-tauri/target/release/bundle/deb/*.deb
   artifacts:
