@@ -99,6 +99,3 @@ build:
       - src-tauri/target/release/bundle/deb/*.deb
       - src-tauri/target/release/bundle/rpm/*.rpm
     expire_in: 7 days
-
-    - ./script/package-deb-repro.sh src-tauri/target/release/bundle/deb/sonar_*.deb
-    - ./script/package-deb-repro.sh \
