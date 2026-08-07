@@ -26,7 +26,9 @@ export const statsFixture = ({
     "dropped": 0,
     "ifDropped": 0,
     "appDropped": 0,
-    "parseErrors": 1,
+    "rejectedTruncated": 2,
+    "rejectedUnsupportedLinkType": 0,
+    "rejectedMalformed": 1,
     "processed": 3
   }
 }) satisfies CaptureEvent;
@@ -55,7 +57,9 @@ export const finishedFixture = ({
     "fileName": "capture.pcap",
     "packetTotalCount": 100,
     "integratedCount": 95,
-    "parseErrorCount": 5,
+    "rejectedTruncatedCount": 3,
+    "rejectedUnsupportedLinkTypeCount": 1,
+    "rejectedMalformedCount": 1,
     "matrixTotalCount": 40
   }
 }) satisfies CaptureEvent;

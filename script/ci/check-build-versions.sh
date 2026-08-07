@@ -65,8 +65,21 @@ printf '%s  %s\n' \
   security/sigstore-trusted-root.json | sha256sum --check --status
 check_contains .github/workflows/publish-smoke.yml 'sudo ./script/ci/use-apt-snapshot.sh'
 check_contains .github/workflows/publish-smoke.yml 'sudo ./script/ci/apt-install-pinned.sh $LINUX_APT_PACKAGES'
-check_contains .github/workflows/publish-smoke.yml 'smoke build bundles with Tauri'
-check_contains .github/workflows/publish-smoke.yml 'npm run tauri build'
+# L'essai à blanc doit exercer la MÊME commande de build que la publication
+# (#136) : un seul build, bundles compris, dans l'environnement épinglé. Un
+# smoke qui construirait autrement pourrait passer au vert pendant que la
+# release réelle échoue — c'est précisément le défaut corrigé par #136.
+check_contains .github/workflows/publish-smoke.yml \
+  "deno run -A ./security/repro-env.ts run bash -lc 'deno task tauri build --ci --no-sign \${TAURI_BUILD_ARGS}'"
+check_contains .github/workflows/publish.yml \
+  "deno run -A ./security/repro-env.ts run bash -lc 'deno task tauri build --ci --no-sign \${TAURI_BUILD_ARGS}'"
+# Les preuves d'inclusion tournent dans les deux chaînes, par format.
+check_contains .github/workflows/publish-smoke.yml './script/ci/verify-deb-embeds-binary.sh'
+check_contains .github/workflows/publish.yml './script/ci/verify-deb-embeds-binary.sh'
+check_contains .github/workflows/publish-smoke.yml './script/ci/verify-macos-dmg-embeds-binary.sh'
+check_contains .github/workflows/publish.yml './script/ci/verify-macos-dmg-embeds-binary.sh'
+check_contains .github/workflows/publish-smoke.yml './script/ci/package-macos-dmg.sh'
+check_contains .github/workflows/publish.yml './script/ci/package-macos-dmg.sh'
 check_contains .github/workflows/publish-smoke.yml './script/ci/validate-windows-release-binary.ps1'
 check_contains .github/workflows/publish-smoke.yml './script/ci/check-windows-bundles-no-npcap.ps1'
 check_contains .github/workflows/publish-smoke.yml './script/ci/smoke-test-release-binary.sh'
@@ -77,6 +90,7 @@ check_contains .github/workflows/covecode.yml 'cargo "+${RUST_NIGHTLY_VERSION}" 
 check_contains .github/workflows/rust-ci.yml 'rustup toolchain install "${RUST_NIGHTLY_VERSION}" --profile minimal'
 check_contains .github/workflows/rust-ci.yml 'cargo "+${RUST_NIGHTLY_VERSION}" udeps --all-targets --locked'
 check_contains .github/workflows/rust-ci.yml 'cargo install cargo-vet --version "${{ steps.versions.outputs.CARGO_VET_VERSION }}" --locked'
+check_contains .github/workflows/rust-ci.yml 'cargo install cargo-fuzz --version "${{ steps.versions.outputs.CARGO_FUZZ_VERSION }}" --locked'
 check_contains .github/workflows/rust-ci.yml 'cargo vet --locked --frozen --no-minimize-exemptions'
 check_contains .github/workflows/rust-ci.yml 'cargo vet --store-path ../src-tauri/supply-chain --locked --frozen --no-minimize-exemptions'
 check_contains .github/workflows/repro-container.yml 'machine: [machine-a, machine-b]'

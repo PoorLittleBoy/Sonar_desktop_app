@@ -1,7 +1,7 @@
 {
   "name": "sonar",
   "private": true,
-  "version": "4.11.0",
+  "version": "4.12.0",
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
@@ -40,7 +40,7 @@
     "@tauri-apps/cli": "2.11.3",
     "@vitejs/plugin-vue": "6.0.7",
     "eslint": "^10.0.1",
-    "eslint-plugin-vue": "^10.10.0",
+    "eslint-plugin-vue": "^10.9.2",
     "globals": "^16.5.0",
     "prettier": "3.6.2",
     "typescript": "^6.0.3",

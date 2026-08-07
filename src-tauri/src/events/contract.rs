@@ -619,7 +619,9 @@ pub enum CaptureEventContract {
         file_name: String,
         packet_total_count: u64,
         integrated_count: u64,
-        parse_error_count: u64,
+        rejected_truncated_count: u64,
+        rejected_unsupported_link_type_count: u64,
+        rejected_malformed_count: u64,
         matrix_total_count: u64,
     },
     ImportProgress {
@@ -665,7 +667,9 @@ pub fn to_contract(event: &super::CaptureEvent<'_>) -> CaptureEventContract {
             dropped,
             if_dropped,
             app_dropped,
-            parse_errors,
+            rejected_truncated,
+            rejected_unsupported_link_type,
+            rejected_malformed,
             processed,
         } => CaptureEventContract::Stats(StatsPayload {
             session_id: *session_id,
@@ -673,7 +677,9 @@ pub fn to_contract(event: &super::CaptureEvent<'_>) -> CaptureEventContract {
             dropped: *dropped,
             if_dropped: *if_dropped,
             app_dropped: *app_dropped,
-            parse_errors: *parse_errors,
+            rejected_truncated: *rejected_truncated,
+            rejected_unsupported_link_type: *rejected_unsupported_link_type,
+            rejected_malformed: *rejected_malformed,
             processed: *processed,
         }),
         super::CaptureEvent::ChannelCapacityPayload {
@@ -712,13 +718,17 @@ pub fn to_contract(event: &super::CaptureEvent<'_>) -> CaptureEventContract {
             file_name,
             packet_total_count,
             integrated_count,
-            parse_error_count,
+            rejected_truncated_count,
+            rejected_unsupported_link_type_count,
+            rejected_malformed_count,
             matrix_total_count,
         } => CaptureEventContract::Finished {
             file_name: file_name.to_string(),
             packet_total_count: *packet_total_count as u64,
             integrated_count: *integrated_count as u64,
-            parse_error_count: *parse_error_count as u64,
+            rejected_truncated_count: *rejected_truncated_count as u64,
+            rejected_unsupported_link_type_count: *rejected_unsupported_link_type_count as u64,
+            rejected_malformed_count: *rejected_malformed_count as u64,
             matrix_total_count: *matrix_total_count as u64,
         },
         super::CaptureEvent::ImportProgress {
@@ -792,7 +802,9 @@ mod tests {
             dropped: 0,
             if_dropped: 0,
             app_dropped: 0,
-            parse_errors: 1,
+            rejected_truncated: 2,
+            rejected_unsupported_link_type: 0,
+            rejected_malformed: 1,
             processed: 3,
         };
         assert_same_json(&real, &to_contract(&real), "stats");
@@ -820,11 +832,15 @@ mod tests {
 
     #[test]
     fn finished_matches() {
+        // Les quatre catégories non nulles à la fois : le test de fidélité
+        // couvre chaque champ du bilan, pas seulement le chemin heureux.
         let real = crate::events::CaptureEvent::Finished {
             file_name: "capture.pcap",
             packet_total_count: 100,
             integrated_count: 95,
-            parse_error_count: 5,
+            rejected_truncated_count: 3,
+            rejected_unsupported_link_type_count: 1,
+            rejected_malformed_count: 1,
             matrix_total_count: 40,
         };
         assert_same_json(&real, &to_contract(&real), "finished");
@@ -1606,7 +1622,9 @@ mod tests {
                 dropped: 0,
                 if_dropped: 0,
                 app_dropped: 0,
-                parse_errors: 1,
+                rejected_truncated: 2,
+                rejected_unsupported_link_type: 0,
+                rejected_malformed: 1,
                 processed: 3,
             }
         );
@@ -1632,7 +1650,9 @@ mod tests {
                 file_name: "capture.pcap",
                 packet_total_count: 100,
                 integrated_count: 95,
-                parse_error_count: 5,
+                rejected_truncated_count: 3,
+                rejected_unsupported_link_type_count: 1,
+                rejected_malformed_count: 1,
                 matrix_total_count: 40,
             }
         );

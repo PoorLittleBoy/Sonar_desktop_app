@@ -149,6 +149,11 @@ pub struct FlowMatrix {
     // `bind_link_type`. Un relevé = un réseau = un DLT (arbitrage 14/07/2026) :
     // toute source d'un autre DLT est refusée. `None` = matrice vierge.
     pub link_type: Option<packet_parser::LinkType>,
+    // Contexte du relevé (site, capteur, interface), déclaré par l'opérateur
+    // à l'arrêt de la capture ou à l'enregistrement (#154, tranche 2). Écrit
+    // dans le préambule #SFMS à l'export ; volontairement hors de la clé des
+    // flux — le même paquet peut être vu par plusieurs capteurs.
+    pub context: crate::sfms::SurveyContext,
 }
 
 impl Default for FlowMatrix {
@@ -164,6 +169,7 @@ impl FlowMatrix {
             label: HashMap::new(),
             origins: HashMap::new(),
             link_type: None,
+            context: crate::sfms::SurveyContext::default(),
         }
     }
 
@@ -457,7 +463,12 @@ impl FlowMatrix {
     /// Exporte la matrice vers un fichier CSV (écriture atomique), préambule
     /// `#SFMS` en tête (version du format, DLT du relevé).
     pub fn export_to_csv(&self, path: String) -> std::io::Result<()> {
-        Self::write_rows_to_csv(&self.to_flat_vec(), self.link_type, &path)
+        Self::write_rows_to_csv_with_context(
+            &self.to_flat_vec(),
+            self.link_type,
+            &self.context,
+            &path,
+        )
     }
 
     /// Écrit des lignes de matrice (snapshot de [`Self::to_flat_vec`]) vers
@@ -469,7 +480,24 @@ impl FlowMatrix {
         link_type: Option<packet_parser::LinkType>,
         path: &str,
     ) -> std::io::Result<()> {
-        write_csv_atomically(path, Some(crate::sfms::format_preamble(link_type)), |wtr| {
+        Self::write_rows_to_csv_with_context(
+            rows,
+            link_type,
+            &crate::sfms::SurveyContext::default(),
+            path,
+        )
+    }
+
+    /// Variante portant le contexte du relevé (site, capteur, interface) dans
+    /// le préambule `#SFMS` (#154, tranche 2).
+    pub fn write_rows_to_csv_with_context(
+        rows: &[FlowMatrixRow],
+        link_type: Option<packet_parser::LinkType>,
+        context: &crate::sfms::SurveyContext,
+        path: &str,
+    ) -> std::io::Result<()> {
+        let preamble = crate::sfms::format_preamble_with_context(link_type, context);
+        write_csv_atomically(path, Some(preamble), |wtr| {
             for row in rows {
                 wtr.serialize(row)?;
             }
@@ -914,11 +942,25 @@ use std::time::UNIX_EPOCH;
 use crate::packet::CapturedPacketOwned;
 
 /// Convertit un timestamp pcap (`tv_sec`, `tv_usec`) en `SystemTime`.
+///
+/// Un fichier hostile peut porter n'importe quoi dans ces champs — un
+/// timestamp négatif casté en non signé faisait déborder `SystemTime` et
+/// **paniquait** (trouvé par le fuzzer `pcap_reader`, #151 ; menace listée
+/// par #96). Les valeurs invalides sont écrasées vers `UNIX_EPOCH` : un
+/// `last_seen` daté de 1970 est visiblement corrompu sans mentir sur le
+/// contenu de la trame, qui reste intégrable.
 pub fn timeval_to_systemtime(tv_sec: impl Into<i64>, tv_usec: impl Into<i64>) -> SystemTime {
     let tv_sec = tv_sec.into();
     let tv_usec = tv_usec.into();
-
-    UNIX_EPOCH + std::time::Duration::new(tv_sec as u64, (tv_usec * 1000) as u32)
+    if tv_sec < 0 || !(0..1_000_000).contains(&tv_usec) {
+        return UNIX_EPOCH;
+    }
+    UNIX_EPOCH
+        .checked_add(std::time::Duration::new(
+            tv_sec as u64,
+            (tv_usec as u32) * 1000,
+        ))
+        .unwrap_or(UNIX_EPOCH)
 }
 
 #[cfg(test)]
@@ -984,6 +1026,29 @@ mod tests {
             stats.last_seen,
             super::timeval_to_systemtime(2_000, 0),
             "un paquet plus ancien ne fait pas régresser la date"
+        );
+    }
+
+    /// Un timestamp hostile ne panique jamais (fuzzer #151, menace #96) :
+    /// négatif, microsecondes hors plage ou débordement de `SystemTime`
+    /// donnent `UNIX_EPOCH` — visiblement corrompu, jamais un crash ni une
+    /// date inventée plausible.
+    #[test]
+    fn hostile_timestamps_never_panic() {
+        use std::time::UNIX_EPOCH;
+        assert_eq!(super::timeval_to_systemtime(-1i64, 0i64), UNIX_EPOCH);
+        assert_eq!(super::timeval_to_systemtime(i64::MIN, 0i64), UNIX_EPOCH);
+        assert_eq!(super::timeval_to_systemtime(0i64, -1i64), UNIX_EPOCH);
+        assert_eq!(super::timeval_to_systemtime(0i64, 1_000_000i64), UNIX_EPOCH);
+        // La borne haute de `SystemTime` dépend de la plateforme (Linux tient
+        // i64::MAX secondes) : la propriété garantie est l'absence de panic,
+        // pas une valeur précise — `checked_add` encaisse le débordement là
+        // où il existe.
+        let _ = super::timeval_to_systemtime(i64::MAX, 999_999i64);
+        // Un timestamp valide reste exact.
+        assert_eq!(
+            super::timeval_to_systemtime(2_000i64, 500_000i64),
+            UNIX_EPOCH + std::time::Duration::new(2_000, 500_000_000)
         );
     }
 
