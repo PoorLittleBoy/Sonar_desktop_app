@@ -90,3 +90,68 @@ build:
   script:
     - deno install
     - deno task tauri build
+  artifacts:
+    name: "sonar-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - src-tauri/target/release/bundle/deb/*.deb
+      - src-tauri/target/release/bundle/rpm/*.rpm
+    expire_in: 7 days
+
+verify-reproducibility:
+  stage: test
+  needs: ["build-ci-image"]
+  image: "${CI_BASE_IMAGE}"
+  tags:
+    - rust-heavy
+  variables:
+    CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+    DENO_DIR: "$CI_PROJECT_DIR/.deno_cache"
+  cache:
+    - key: { files: [deno.lock] }
+      paths: [.deno_cache/]
+    - key: { files: [Cargo.lock] }
+      paths: [.cargo/registry/, src-tauri/target/]
+  script:
+    # --- Build 1 ---
+    - deno install --frozen
+    - deno task tauri build
+    - mkdir -p /tmp/run1 /tmp/run2
+    - cp src-tauri/target/release/sonar /tmp/run1/sonar
+    - cp src-tauri/target/release/bundle/deb/*.deb /tmp/run1/sonar.deb
+
+    # --- Nettoyage complet avant rebuild ---
+    - rm -rf src-tauri/target
+
+    # --- Build 2 ---
+    - deno install --frozen
+    - deno task tauri build
+    - cp src-tauri/target/release/sonar /tmp/run2/sonar
+    - cp src-tauri/target/release/bundle/deb/*.deb /tmp/run2/sonar.deb
+
+    # --- Comparaison binaire brut ---
+    - |
+      echo "=== Comparaison binaire brut ==="
+      if cmp -s /tmp/run1/sonar /tmp/run2/sonar; then
+        echo "OK - binaire brut reproductible"
+      else
+        echo "ÉCHEC - binaire brut NON reproductible"
+        sha256sum /tmp/run1/sonar /tmp/run2/sonar
+        exit 1
+      fi
+
+    # --- Comparaison .deb ---
+    - |
+      echo "=== Comparaison .deb ==="
+      if cmp -s /tmp/run1/sonar.deb /tmp/run2/sonar.deb; then
+        echo "OK - .deb reproductible"
+      else
+        echo "ATTENTION - .deb NON reproductible (packaging, pas compilation)"
+        sha256sum /tmp/run1/sonar.deb /tmp/run2/sonar.deb
+        apt-get install -y diffoscope > /dev/null 2>&1 || true
+        diffoscope /tmp/run1/sonar.deb /tmp/run2/sonar.deb || true
+        exit 1
+      fi
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  allow_failure: true
