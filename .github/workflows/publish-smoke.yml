@@ -133,7 +133,7 @@ jobs:
         shell: bash
         run: sha256sum src-tauri/target/release/bundle/deb/*.deb
 
-            - name: Reproducibility diagnostics
+      - name: Reproducibility diagnostics
         if: matrix.platform == 'ubuntu-22.04'
         shell: bash
         run: |
