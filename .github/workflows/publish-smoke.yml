@@ -133,43 +133,21 @@ jobs:
         shell: bash
         run: sha256sum src-tauri/target/release/bundle/deb/*.deb
 
-      - name: Reproducibility diagnostics
+      - name: Debug reproducibility values
         if: matrix.platform == 'ubuntu-22.04'
         shell: bash
         run: |
-          set -euxo pipefail
+          set -euo pipefail
 
-          echo '=== GIT ==='
+          echo "=== GIT ==="
           git rev-parse HEAD
           git log -1 --format='%H %ct'
-          git status --short
 
-          echo '=== REPRO ENV ==='
-          deno run -A ./security/repro-env.ts run env | grep -E '^(SOURCE_DATE_EPOCH|RUSTFLAGS)=' || true
-
-          echo '=== OS / ARCH ==='
-          uname -a
-          dpkg --print-architecture
-          cat /etc/os-release
-
-          echo '=== TOOLCHAINS ==='
-          rustc --version
-          rustc -vV
-          cargo --version
-          deno --version
-
-          echo '=== APT PACKAGES ==='
-          dpkg-query -W -f='${Package}\t${Version}\n' \
-            ca-certificates \
-            curl \
-            unzip \
-            build-essential \
-            $LINUX_APT_PACKAGES \
-            2>/dev/null | sort
-
-          echo '=== DEB ==='
-          sha256sum src-tauri/target/release/bundle/deb/*.deb
-          ar t src-tauri/target/release/bundle/deb/*.deb
+          echo "=== REPRO ENV ==="
+          deno run -A ./security/repro-env.ts run bash -lc '
+            printf "SOURCE_DATE_EPOCH=%s\n" "${SOURCE_DATE_EPOCH-<unset>}"
+            printf "RUSTFLAGS=%s\n" "${RUSTFLAGS-<unset>}"
+          '
 
       - name: Debug commit and rustc
         shell: bash
