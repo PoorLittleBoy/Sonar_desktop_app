@@ -89,13 +89,12 @@ build:
       paths: [.cargo/registry/, src-tauri/target/]
   script:
     - deno install
-    - deno task tauri build
-    - export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+    - deno run -A ./security/repro-env.ts run bash -lc 'deno task tauri build --ci --no-sign'
     - ./script/package-deb-repro.sh src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/deb/*.deb
     - sha256sum src-tauri/target/release/bundle/deb/*.deb
   artifacts:
     name: "sonar-${CI_COMMIT_SHORT_SHA}"
-    paths:
+    paths: 
       - src-tauri/target/release/bundle/deb/*.deb
       - src-tauri/target/release/bundle/rpm/*.rpm
     expire_in: 7 days

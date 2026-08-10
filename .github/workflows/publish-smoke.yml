@@ -127,6 +127,11 @@ jobs:
           for deb in src-tauri/target/release/bundle/deb/*.deb; do
             SOURCE_DATE_EPOCH="$epoch" ./script/package-deb-repro.sh "$deb" "$deb"
           done
+      
+      - name: Hash release .deb
+        if: matrix.platform == 'ubuntu-22.04'
+        shell: bash
+        run: sha256sum src-tauri/target/release/bundle/deb/*.deb
 
       - name: Prove .deb embeds the smoke-tested binary
         if: matrix.platform == 'ubuntu-22.04'
