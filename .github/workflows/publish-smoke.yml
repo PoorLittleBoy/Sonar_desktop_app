@@ -136,6 +136,7 @@ jobs:
       - name: Debug commit and rustc
         shell: bash
         run: |
+          deno run -A ./security/repro-env.ts run env | grep -E 'RUSTFLAGS|SOURCE_DATE_EPOCH'
           git log -1 --format=%H
           rustc -vV | grep commit-hash
 
