@@ -10,13 +10,18 @@ COPY script/ci/use-apt-snapshot.sh /tmp/use-apt-snapshot.sh
 COPY script/ci/apt-install-pinned.sh /tmp/apt-install-pinned.sh
 
 RUN set -eux; \
-    apt-get update && apt-get install -y --no-install-recommends ca-certificates curl; \
-    rm -rf /var/lib/apt/lists/*; \
     chmod +x /tmp/use-apt-snapshot.sh /tmp/apt-install-pinned.sh; \
     VERSIONS_FILE=/tmp/build-versions.env /tmp/use-apt-snapshot.sh; \
-    /tmp/apt-install-pinned.sh build-essential ${LINUX_APT_PACKAGES}; \
-    curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh -s v${DENO_VERSION}; \
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_VERSION} --profile minimal; \
+    /tmp/apt-install-pinned.sh \
+        ca-certificates \
+        curl \
+        unzip \
+        build-essential \
+        ${LINUX_APT_PACKAGES}; \
+    curl -fsSL https://deno.land/install.sh | \
+        DENO_INSTALL=/usr/local sh -s v${DENO_VERSION}; \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+        sh -s -- -y --default-toolchain ${RUST_VERSION} --profile minimal; \
     rm -rf /var/lib/apt/lists/*
 
 ENV PATH="/root/.cargo/bin:${PATH}"
