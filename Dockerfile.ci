@@ -19,6 +19,7 @@ RUN set -eux; \
         curl \
         unzip \
         build-essential \
+        git \
         ${LINUX_APT_PACKAGES}; \
     curl -fsSL https://deno.land/install.sh | \
         DENO_INSTALL=/usr/local sh -s v${DENO_VERSION}; \
