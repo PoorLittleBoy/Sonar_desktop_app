@@ -28,11 +28,11 @@ build-ci-image:
           --context "${CI_PROJECT_DIR}" \
           --dockerfile "${CI_PROJECT_DIR}/Dockerfile.ci" \
           --destination "${IMAGE}" \
-          --build-arg RUST_IMAGE_DIGEST="${RUST_IMAGE_DIGEST}" \
-          --build-arg GITLAB_APT_PACKAGES="${GITLAB_APT_PACKAGES}" \
-          --build-arg DEBIAN_SNAPSHOT_BASE_URL="${DEBIAN_SNAPSHOT_BASE_URL}" \
+          --build-arg UBUNTU_IMAGE_DIGEST="${UBUNTU_IMAGE_DIGEST}" \
+          --build-arg LINUX_APT_PACKAGES="${LINUX_APT_PACKAGES}" \
           --build-arg APT_SNAPSHOT_TIMESTAMP="${APT_SNAPSHOT_TIMESTAMP}" \
           --build-arg DENO_VERSION="${DENO_VERSION}" \
+          --build-arg RUST_VERSION="${RUST_VERSION}" \
           --cache=true \
           --cache-repo="${CI_REGISTRY_IMAGE}/cache"
       fi

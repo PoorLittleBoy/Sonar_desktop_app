@@ -1,18 +1,25 @@
-ARG RUST_IMAGE_DIGEST
-FROM rust@${RUST_IMAGE_DIGEST}
+ARG UBUNTU_IMAGE_DIGEST
+FROM ubuntu@${UBUNTU_IMAGE_DIGEST}
 
-ARG GITLAB_APT_PACKAGES
-ARG DEBIAN_SNAPSHOT_BASE_URL
-ARG APT_SNAPSHOT_TIMESTAMP
+ARG LINUX_APT_PACKAGES
 ARG DENO_VERSION
+ARG RUST_VERSION
+
+COPY config/build-versions.env /tmp/build-versions.env
+COPY script/ci/use-apt-snapshot.sh /tmp/use-apt-snapshot.sh
+COPY script/ci/apt-install-pinned.sh /tmp/apt-install-pinned.sh
 
 RUN set -eux; \
-    codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"; \
-    echo "deb [check-valid-until=no] ${DEBIAN_SNAPSHOT_BASE_URL}/${APT_SNAPSHOT_TIMESTAMP}/ ${codename} main" > /etc/apt/sources.list; \
-    apt-get -o Acquire::Check-Valid-Until=false update; \
-    apt-get install -y --no-install-recommends ${GITLAB_APT_PACKAGES}; \
+    apt-get update && apt-get install -y --no-install-recommends ca-certificates curl; \
+    rm -rf /var/lib/apt/lists/*; \
+    chmod +x /tmp/use-apt-snapshot.sh /tmp/apt-install-pinned.sh; \
+    VERSIONS_FILE=/tmp/build-versions.env /tmp/use-apt-snapshot.sh; \
+    /tmp/apt-install-pinned.sh build-essential ${LINUX_APT_PACKAGES}; \
     curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh -s v${DENO_VERSION}; \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_VERSION} --profile minimal; \
     rm -rf /var/lib/apt/lists/*
 
-RUN echo 'export PATH="/usr/local/cargo/bin:$PATH"' > /etc/profile.d/cargo.sh \
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN echo 'export PATH="/root/.cargo/bin:$PATH"' > /etc/profile.d/cargo.sh \
     && chmod +x /etc/profile.d/cargo.sh
