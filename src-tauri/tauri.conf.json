@@ -1,12 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "sonar",
-  "version": "4.12.0",
+  "version": "4.12.1",
   "identifier": "fr.sonar.ssf",
   "build": {
     "beforeDevCommand": "deno task dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "deno task build",
+    "beforeBundleCommand": "bash ./script/ci/normalize-bundle-mtimes.sh",
     "frontendDist": "../dist"
   },
   "app": {

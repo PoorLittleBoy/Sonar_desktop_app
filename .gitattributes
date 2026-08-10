@@ -10,6 +10,27 @@
 *.yaml text eol=lf
 *.md   text eol=lf
 
+# Sources du frontend et ressources empaquetées : sans eol=lf explicite,
+# elles tombent sous `* text=auto` et un checkout Windows (core.autocrlf=true
+# par défaut sur Git for Windows) les matérialise en CRLF. Vite embarque alors
+# un contenu différent de celui d'un checkout Linux : le bundle change de nom
+# et le binaire final diverge, à commit et versions d'outils identiques.
+# Constaté le 08/08/2026 : assets/index-30IFmrIC.js sur Windows contre
+# assets/index-BvJNXkwD.js en conteneur Linux, pour le même tag v4.12.1.
+*.vue  text eol=lf
+*.ts   text eol=lf
+*.js   text eol=lf
+*.mjs  text eol=lf
+*.cjs  text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.svg  text eol=lf
+# labels.csv est livré comme ressource du bundle : ses fins de ligne entrent
+# telles quelles dans l'installateur.
+*.csv  text eol=lf
+# hooks.nsh est compilé dans le setup.exe par makensis.
+*.nsh  text eol=lf
+
 # Vendored crates: DO NOT apply text normalization broadly.
 # Keep vendored content byte-for-byte as committed.
 src-tauri/vendor/** -text
