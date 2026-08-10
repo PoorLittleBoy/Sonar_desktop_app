@@ -88,6 +88,10 @@ build:
     - key: { files: [Cargo.lock] }
       paths: [.cargo/registry/, src-tauri/target/]
   script:
+    - which cargo || echo "cargo pas dans PATH"
+    - echo "PATH=$PATH"
+    - bash -lc 'which cargo || echo "cargo pas dans PATH (login shell)"'
+    - bash -lc 'echo "PATH en login shell=$PATH"'
     - deno install
     - deno run -A ./security/repro-env.ts run bash -lc 'deno task tauri build --ci --no-sign'
     - ./script/package-deb-repro.sh src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/deb/*.deb
