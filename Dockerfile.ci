@@ -1,8 +1,6 @@
 ARG RUST_IMAGE_DIGEST
 FROM rust@${RUST_IMAGE_DIGEST}
 
-ENV PATH="/usr/local/cargo/bin:${PATH}"
-
 ARG GITLAB_APT_PACKAGES
 ARG DEBIAN_SNAPSHOT_BASE_URL
 ARG APT_SNAPSHOT_TIMESTAMP
@@ -15,3 +13,6 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends ${GITLAB_APT_PACKAGES}; \
     curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh -s v${DENO_VERSION}; \
     rm -rf /var/lib/apt/lists/*
+
+RUN echo 'export PATH="/usr/local/cargo/bin:$PATH"' > /etc/profile.d/cargo.sh \
+    && chmod +x /etc/profile.d/cargo.sh
