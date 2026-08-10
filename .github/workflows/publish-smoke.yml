@@ -133,6 +133,12 @@ jobs:
         shell: bash
         run: sha256sum src-tauri/target/release/bundle/deb/*.deb
 
+      - name: Debug commit and rustc
+        shell: bash
+        run: |
+          git log -1 --format=%H
+          rustc -vV | grep commit-hash
+
       - name: Prove .deb embeds the smoke-tested binary
         if: matrix.platform == 'ubuntu-22.04'
         shell: bash

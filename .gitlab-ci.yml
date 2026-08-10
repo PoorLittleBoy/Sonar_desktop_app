@@ -96,6 +96,8 @@ build:
     - echo "PATH=$PATH"
     - bash -lc 'which cargo || echo "cargo pas dans PATH (login shell)"'
     - bash -lc 'echo "PATH en login shell=$PATH"'
+    - git log -1 --format=%H
+    - rustc -vV | grep commit-hash
     - deno install
     - deno run -A ./security/repro-env.ts run bash -lc 'deno task tauri build --ci --no-sign'
     - ./script/package-deb-repro.sh src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/deb/*.deb
