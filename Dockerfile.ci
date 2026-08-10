@@ -12,7 +12,7 @@ COPY script/ci/apt-install-pinned.sh /tmp/apt-install-pinned.sh
 RUN set -eux; \
     chmod +x /tmp/use-apt-snapshot.sh /tmp/apt-install-pinned.sh; \
     cat /etc/apt/sources.list; \
-    ls -l /etc/ssl/certs/ca-certificates.crt || true; \
+    apt-get update && apt-get install -y --no-install-recommends ca-certificates; \
     VERSIONS_FILE=/tmp/build-versions.env /tmp/use-apt-snapshot.sh; \
     /tmp/apt-install-pinned.sh \
         ca-certificates \
