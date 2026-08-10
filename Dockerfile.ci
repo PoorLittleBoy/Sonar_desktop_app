@@ -14,6 +14,8 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*; \
     chmod +x /tmp/use-apt-snapshot.sh /tmp/apt-install-pinned.sh; \
     VERSIONS_FILE=/tmp/build-versions.env /tmp/use-apt-snapshot.sh; \
+    apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Retries=5 \
+        dist-upgrade -y --allow-downgrades; \
     /tmp/apt-install-pinned.sh build-essential ${LINUX_APT_PACKAGES}; \
     curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh -s v${DENO_VERSION}; \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_VERSION} --profile minimal; \
