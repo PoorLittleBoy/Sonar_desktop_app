@@ -20,16 +20,14 @@ build-ci-image:
   before_script:
     - mkdir -p "/etc/containers/certs.d/${CI_REGISTRY}"
     - cp "$ERDT_CA_CERT" "/etc/containers/certs.d/${CI_REGISTRY}/ca.crt"
-    - echo "=== RESOLV.CONF ==="
-    - cat /etc/resolv.conf
-    - echo "=== DNS GITLAB ==="
-    - getent hosts gitlab.erdtcyber.com || true
-    - echo "=== DNS GOOGLE ==="
-    - getent hosts google.com || true
-    - echo "=== ROUTE ==="
-    - ip route || true
-    - echo "=== PODMAN ==="
-    - podman version
+    - echo "=== IPV4 GITLAB ==="
+    - getent ahostsv4 gitlab.erdtcyber.com
+    - echo "=== IPV6 GITLAB ==="
+    - getent ahostsv6 gitlab.erdtcyber.com || true
+    - echo "=== CURL REGISTRY ==="
+    - curl -vk --connect-timeout 5 https://gitlab.erdtcyber.com:5050/v2/ || true
+    - echo "=== PODMAN DEBUG ==="
+    - podman --log-level=debug login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
     - echo "=== LOGIN ==="
     - podman login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
   script:
