@@ -21,13 +21,12 @@ build-ci-image:
     - mkdir -p "/etc/containers/certs.d/${CI_REGISTRY}"
     - cp "$ERDT_CA_CERT" "/etc/containers/certs.d/${CI_REGISTRY}/ca.crt"
     - id
-    - uname -a
-    - podman version
-    - podman info
-    - cat /proc/self/status | grep -E 'Cap(Prm|Eff|Bnd)'
     - cat /proc/self/uid_map
     - cat /proc/self/gid_map
-    - podman info --debug
+    - grep -E 'Cap(Prm|Eff|Bnd)' /proc/self/status
+    - grep -E 'Seccomp|NoNewPrivs' /proc/self/status
+    - cat /proc/1/cgroup
+    - podman version
     - podman login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
   script:
     - . ./config/build-versions.env
