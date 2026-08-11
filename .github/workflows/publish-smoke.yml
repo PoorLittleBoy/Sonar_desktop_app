@@ -148,6 +148,18 @@ jobs:
             printf "SOURCE_DATE_EPOCH=%s\n" "${SOURCE_DATE_EPOCH-<unset>}"
             printf "RUSTFLAGS=%s\n" "${RUSTFLAGS-<unset>}"
           '
+          echo "=== APT PACKAGES ==="
+          dpkg-query -W -f='${Package}\t${Version}\n' \
+            ca-certificates \
+            curl \
+            unzip \
+            build-essential \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libpcap-dev \
+            2>/dev/null || true
 
       - name: Debug commit and rustc
         shell: bash
