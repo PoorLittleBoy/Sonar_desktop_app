@@ -20,11 +20,12 @@ build-ci-image:
   before_script:
     - mkdir -p "/etc/containers/certs.d/${CI_REGISTRY}"
     - cp "$ERDT_CA_CERT" "/etc/containers/certs.d/${CI_REGISTRY}/ca.crt"
-    - podman network ls
-    - podman network inspect podman
-    - cat /etc/containers/containers.conf || true
-    - cat /etc/containers/containers.conf.d/* || true
-    - ls -la /etc/containers/networks/ || true
+    - echo "=== PODMAN DNS CONFIG ==="
+    - podman info --debug | grep -i -A30 -B5 dns
+    - echo "=== RESOLV.CONF ==="
+    - cat /etc/resolv.conf
+    - echo "=== PODMAN LOGIN IP ==="
+    - podman login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "192.168.1.70:5050" || true
     - echo "=== LOGIN ==="
     - podman login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
   script:
