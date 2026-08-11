@@ -108,6 +108,11 @@ build:
         patchelf \
         libpcap-dev \
         2>/dev/null || true
+    - |
+      echo "=== OS / ARCH ==="
+      uname -a
+      dpkg --print-architecture
+      cat /etc/os-release
   artifacts:
     name: "sonar-${CI_COMMIT_SHORT_SHA}"
     paths: 
