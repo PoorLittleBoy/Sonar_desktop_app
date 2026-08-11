@@ -97,34 +97,6 @@ build:
     - ./script/package-deb-repro.sh src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/deb/*.deb
     - echo "=== DEB SHA256 ==="
           sha256sum sonar.deb
-    - |
-      set -euo pipefail
-
-      deb="$(echo src-tauri/target/release/bundle/deb/*.deb)"
-
-      rm -rf /tmp/deb-debug
-      mkdir /tmp/deb-debug
-      cd /tmp/deb-debug
-
-      cp "$CI_PROJECT_DIR/$deb" sonar.deb
-
-      echo "=== DEB SHA256 ==="
-      sha256sum sonar.deb
-
-      echo "=== AR MEMBERS ==="
-      ar t sonar.deb
-
-      echo "=== EXTRACT AR ==="
-      ar x sonar.deb
-
-      echo "=== INNER SHA256 ==="
-      sha256sum debian-binary control.tar.* data.tar.*
-
-      echo "=== CONTROL CONTENT ==="
-      tar -tvf control.tar.*
-
-      echo "=== DATA CONTENT ==="
-      tar -tvf data.tar.*
   artifacts:
     name: "sonar-${CI_COMMIT_SHORT_SHA}"
     paths: 
