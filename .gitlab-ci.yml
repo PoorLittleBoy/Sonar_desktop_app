@@ -95,19 +95,18 @@ build:
     - deno install --frozen
     - deno run -A ./security/repro-env.ts run bash -lc 'deno task tauri build --ci --no-sign'
     - ./script/package-deb-repro.sh src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/deb/*.deb
-    - echo "=== REPRODUCIBILITY DEBUG ==="
-    - sha256sum src-tauri/target/release/bundle/deb/*.deb
-    - ar t src-tauri/target/release/bundle/deb/*.deb
-    - echo "=== SOURCE DATE EPOCH ==="
-    - echo "$SOURCE_DATE_EPOCH"
-    - echo "=== GIT ==="
-    - git rev-parse HEAD
-    - git log -1 --format='%H %ct'
-    - echo "=== TOOLCHAINS ==="
-    - rustc --version
-    - cargo --version
-    - deno --version
-    - git --version
+    - echo "=== APT PACKAGES ==="
+      dpkg-query -W -f='${Package}\t${Version}\n' \
+        ca-certificates \
+        curl \
+        unzip \
+        build-essential \
+        libwebkit2gtk-4.1-dev \
+        libappindicator3-dev \
+        librsvg2-dev \
+        patchelf \
+        libpcap-dev \
+        2>/dev/null || true
   artifacts:
     name: "sonar-${CI_COMMIT_SHORT_SHA}"
     paths: 
