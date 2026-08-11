@@ -99,7 +99,9 @@ build:
           sha256sum sonar.deb
   artifacts:
     name: "sonar-${CI_COMMIT_SHORT_SHA}"
-    paths: 
+    when: always
+    paths:
       - src-tauri/target/release/bundle/deb/*.deb
       - src-tauri/target/release/bundle/rpm/*.rpm
+      - repro-hashes.txt
     expire_in: 7 days
