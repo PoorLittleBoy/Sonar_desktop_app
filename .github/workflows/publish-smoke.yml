@@ -161,6 +161,38 @@ jobs:
             libpcap-dev \
             2>/dev/null || true
 
+      - name: Inspect Debian package
+        if: matrix.platform == 'ubuntu-22.04'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          deb="$(echo src-tauri/target/release/bundle/deb/*.deb)"
+
+          rm -rf /tmp/deb-debug
+          mkdir /tmp/deb-debug
+          cd /tmp/deb-debug
+
+          cp "$GITHUB_WORKSPACE/$deb" sonar.deb
+
+          echo "=== DEB SHA256 ==="
+          sha256sum sonar.deb
+
+          echo "=== AR MEMBERS ==="
+          ar t sonar.deb
+
+          echo "=== EXTRACT AR ==="
+          ar x sonar.deb
+
+          echo "=== INNER SHA256 ==="
+          sha256sum debian-binary control.tar.* data.tar.*
+
+          echo "=== CONTROL CONTENT ==="
+          tar -tvf control.tar.*
+
+          echo "=== DATA CONTENT ==="
+          tar -tvf data.tar.*
+
       - name: Debug commit and rustc
         shell: bash
         run: |
