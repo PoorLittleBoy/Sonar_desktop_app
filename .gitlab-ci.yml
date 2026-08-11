@@ -95,6 +95,25 @@ build:
     - deno install --frozen
     - deno run -A ./security/repro-env.ts run bash -lc 'deno task tauri build --ci --no-sign'
     - ./script/package-deb-repro.sh src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/deb/*.deb
+    # Preuve inter-forges : le hash du binaire (et du .deb repassé au
+    # déterminisme) doit être identique à celui produit par GitHub Actions
+    # sur le MÊME commit (repro-container.yml). Le hash est publié en
+    # artefact ; si EXPECTED_SONAR_SHA256 est fourni (variable de pipeline),
+    # l'écart fait échouer le job — même motif que windows_reference_sha256
+    # côté GitHub (#174).
+    - |
+      echo "=== REPRO HASHES (commit ${CI_COMMIT_SHA}) ==="
+      sha256sum src-tauri/target/release/sonar \
+        src-tauri/target/release/bundle/deb/*.deb | tee repro-hashes.txt
+    - |
+      if [ -n "${EXPECTED_SONAR_SHA256:-}" ]; then
+        actual="$(sha256sum src-tauri/target/release/sonar | cut -d' ' -f1)"
+        if [ "$actual" != "$EXPECTED_SONAR_SHA256" ]; then
+          echo "ÉCHEC : sonar ${actual} != référence ${EXPECTED_SONAR_SHA256}"
+          exit 1
+        fi
+        echo "OK : sonar identique à la référence (${actual})"
+      fi
     - |
       echo "=== APT PACKAGES ==="
       dpkg-query -W -f='${Package}\t${Version}\n' \
@@ -115,7 +134,9 @@ build:
       cat /etc/os-release
   artifacts:
     name: "sonar-${CI_COMMIT_SHORT_SHA}"
-    paths: 
+    when: always
+    paths:
       - src-tauri/target/release/bundle/deb/*.deb
       - src-tauri/target/release/bundle/rpm/*.rpm
+      - repro-hashes.txt
     expire_in: 7 days
