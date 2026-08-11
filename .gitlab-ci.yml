@@ -75,14 +75,17 @@ test-ci-image:
   before_script:
     - mkdir -p "/etc/containers/certs.d/${CI_REGISTRY}"
     - cp "$ERDT_CA_CERT" "/etc/containers/certs.d/${CI_REGISTRY}/ca.crt"
-    - echo "=== DNS ==="
+    - echo "=== RESOLV.CONF ==="
     - cat /etc/resolv.conf
-    - echo "=== RESOLUTION ==="
+    - echo "=== DNS GITLAB ==="
     - getent hosts gitlab.erdtcyber.com || true
+    - echo "=== DNS GOOGLE ==="
+    - getent hosts google.com || true
     - echo "=== ROUTE ==="
     - ip route || true
     - echo "=== PODMAN ==="
-    - podman info --debug || true
+    - podman version
+    - echo "=== LOGIN ==="
     - podman login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
     - podman pull "${CI_BASE_IMAGE}"
   script:
