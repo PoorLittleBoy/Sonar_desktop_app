@@ -95,7 +95,8 @@ build:
     - deno install --frozen
     - deno run -A ./security/repro-env.ts run bash -lc 'deno task tauri build --ci --no-sign'
     - ./script/package-deb-repro.sh src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/deb/*.deb
-    - echo "=== APT PACKAGES ==="
+    - |
+      echo "=== APT PACKAGES ==="
       dpkg-query -W -f='${Package}\t${Version}\n' \
         ca-certificates \
         curl \
