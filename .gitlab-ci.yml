@@ -3,100 +3,43 @@ stages:
   - build
   - test
 
-# ---------------------------------------------------------------------------
-# Build (ou réutilisation en cache) de l'image CI de base, via Podman rootless.
-# Remplace l'ancien job Kaniko : mêmes variables, même logique de hash,
-# même registre. Le smoke-test de la toolchain est déplacé dans un job
-# dédié (test-ci-image) pour tourner même quand l'image est déjà en cache.
-# ---------------------------------------------------------------------------
 build-ci-image:
   stage: .pre
-  image: quay.io/podman/stable
-  tags:
-    - rust-heavy
-  variables:
-    STORAGE_DRIVER: vfs
-    BUILDAH_FORMAT: docker
-  before_script:
-    - mkdir -p "/etc/containers/certs.d/${CI_REGISTRY}"
-    - cp "$ERDT_CA_CERT" "/etc/containers/certs.d/${CI_REGISTRY}/ca.crt"
-    - podman login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
+  image:
+    name: ghcr.io/osscontainertools/kaniko:v1.28.1-debug
+    entrypoint: [""]
+  before_script:  
+    - cp "$ERDT_CA_CERT" /kaniko/ssl/certs/erdtcyber-CA.crt
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"${CI_REGISTRY}\":{\"auth\":\"$(printf "%s:%s" "${CI_REGISTRY_USER}" "${CI_REGISTRY_PASSWORD}" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
   script:
     - . ./config/build-versions.env
     - IMAGE_TAG=$(cat ./config/build-versions.env Dockerfile.ci | sha256sum | cut -c1-16)
     - IMAGE="${CI_REGISTRY_IMAGE}/ci-base:${IMAGE_TAG}"
     - |
-      if podman pull "${IMAGE}" > /dev/null 2>&1; then
+      if curl --fail \
+        -u "${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD}" \
+        "https://${CI_REGISTRY}/v2/${CI_PROJECT_PATH}/ci-base/manifests/${IMAGE_TAG}" \
+        > /dev/null 2>&1
+      then
         echo "Image déjà présente (${IMAGE_TAG}), pas de rebuild."
       else
-        podman build \
-          --file Dockerfile.ci \
+        /kaniko/executor \
+          --context "${CI_PROJECT_DIR}" \
+          --dockerfile "${CI_PROJECT_DIR}/Dockerfile.ci" \
+          --destination "${IMAGE}" \
           --build-arg UBUNTU_IMAGE_DIGEST="${UBUNTU_IMAGE_DIGEST}" \
           --build-arg LINUX_APT_PACKAGES="${LINUX_APT_PACKAGES}" \
           --build-arg APT_SNAPSHOT_TIMESTAMP="${APT_SNAPSHOT_TIMESTAMP}" \
           --build-arg DENO_VERSION="${DENO_VERSION}" \
           --build-arg RUST_VERSION="${RUST_VERSION}" \
-          --tag "${IMAGE}" \
-          .
-        podman push "${IMAGE}"
+          --cache=true \
+          --cache-repo="${CI_REGISTRY_IMAGE}/cache"
       fi
     - echo "CI_BASE_IMAGE=${IMAGE}" > build.env
   artifacts:
     reports:
       dotenv: build.env
-  # Cache des layers Podman entre pipelines (équivalent du --cache-repo Kaniko).
-  # Optionnel : à activer si le stockage local sur les runners rust-heavy
-  # persiste bien entre jobs (sinon aucun effet, juste un no-op).
-  cache:
-    key: podman-layers
-    paths:
-      - .containers-storage/
-
-# ---------------------------------------------------------------------------
-# Vérifie que l'image CI de base est réellement utilisable, systématiquement
-# (même si build-ci-image a juste réutilisé le cache sans rebuild).
-# ---------------------------------------------------------------------------
-test-ci-image:
-  stage: .pre
-  image: quay.io/podman/stable
-  needs:
-    - build-ci-image
-  tags:
-    - rust-heavy
-  variables:
-    STORAGE_DRIVER: vfs
-  before_script:
-    - mkdir -p "/etc/containers/certs.d/${CI_REGISTRY}"
-    - cp "$ERDT_CA_CERT" "/etc/containers/certs.d/${CI_REGISTRY}/ca.crt"
-    - podman login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
-    - podman pull "${CI_BASE_IMAGE}"
-  script:
-    - |
-      podman run --rm "${CI_BASE_IMAGE}" bash -lc '
-        set -e
-        echo "=== TOOLCHAIN ==="
-        rustc --version
-        cargo --version
-        deno --version
-
-        echo "=== APT PACKAGES ==="
-        dpkg-query -W -f="\${Package}\t\${Version}\n" \
-          ca-certificates \
-          curl \
-          unzip \
-          build-essential \
-          libwebkit2gtk-4.1-dev \
-          libappindicator3-dev \
-          librsvg2-dev \
-          patchelf \
-          libpcap-dev \
-          2>/dev/null || true
-
-        echo "=== OS / ARCH ==="
-        uname -a
-        dpkg --print-architecture
-        cat /etc/os-release
-      '
 
 eslint:
   rules:
@@ -140,9 +83,6 @@ build:
   tags:
     - rust-heavy
   image: "${CI_BASE_IMAGE}"
-  needs:
-    - build-ci-image
-    - test-ci-image
   variables:
     CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
     DENO_DIR: "$CI_PROJECT_DIR/.deno_cache"
@@ -157,11 +97,37 @@ build:
     - ./script/package-deb-repro.sh src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/deb/*.deb
     - echo "=== DEB SHA256 ==="
           sha256sum sonar.deb
+    - |
+      set -euo pipefail
+
+      deb="$(echo src-tauri/target/release/bundle/deb/*.deb)"
+
+      rm -rf /tmp/deb-debug
+      mkdir /tmp/deb-debug
+      cd /tmp/deb-debug
+
+      cp "$CI_PROJECT_DIR/$deb" sonar.deb
+
+      echo "=== DEB SHA256 ==="
+      sha256sum sonar.deb
+
+      echo "=== AR MEMBERS ==="
+      ar t sonar.deb
+
+      echo "=== EXTRACT AR ==="
+      ar x sonar.deb
+
+      echo "=== INNER SHA256 ==="
+      sha256sum debian-binary control.tar.* data.tar.*
+
+      echo "=== CONTROL CONTENT ==="
+      tar -tvf control.tar.*
+
+      echo "=== DATA CONTENT ==="
+      tar -tvf data.tar.*
   artifacts:
     name: "sonar-${CI_COMMIT_SHORT_SHA}"
-    when: always
-    paths:
+    paths: 
       - src-tauri/target/release/bundle/deb/*.deb
       - src-tauri/target/release/bundle/rpm/*.rpm
-      - repro-hashes.txt
     expire_in: 7 days
