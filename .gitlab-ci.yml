@@ -96,7 +96,7 @@ build:
     - deno run -A ./security/repro-env.ts run bash -lc 'deno task tauri build --ci --no-sign'
     - ./script/package-deb-repro.sh src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/deb/*.deb
     - echo "=== DEB SHA256 ==="
-    - sha256sum sonar_4.12.1_amd64.deb
+    - sha256sum src-tauri/target/release/bundle/deb/sonar_4.12.1_amd64.deb
   artifacts:
     name: "sonar-${CI_COMMIT_SHORT_SHA}"
     paths: 
